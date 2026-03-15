@@ -14,32 +14,6 @@ Osobisty asystent AI działający lokalnie na Android (Termux + Ollama), dostęp
 - 🎭 **Persony** — zmień charakter asystenta (`/persona coder`, `/persona planner`)
 - 🔀 **Multi-model** — przełącz model ręcznie (`/model llama3:8b`)
 
-## Instalacja w Termux
-
-```bash
-# 1. Upewnij się, że Ollama działa
-ollama serve &
-ollama pull llama3.2:3b   # szybki model
-ollama pull llama3:8b     # mocny model
-
-# 2. Zainstaluj Node.js (jeśli nie masz)
-pkg install nodejs
-
-# 3. Sklonuj / skopiuj projekt
-cd ~/projects/termux-ai-assistant
-
-# 4. Zainstaluj zależności
-npm install
-
-# 5. Skonfiguruj
-cp .env.example .env
-# Wypełnij TELEGRAM_BOT_TOKEN w .env (token od @BotFather)
-# Opcjonalnie: ALLOWED_USER_IDS=TwojeID
-
-# 6. Uruchom
-npm start
-```
-
 ## Konfiguracja (.env)
 
 | Zmienna | Opis | Domyślnie |
