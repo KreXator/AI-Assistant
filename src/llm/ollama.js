@@ -8,8 +8,8 @@ const axios = require('axios');
 const db    = require('../db/database');
 
 const BASE_URL          = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
-const TOKEN_LIMIT       = parseInt(process.env.CONTEXT_TOKEN_LIMIT || '3000', 10);
-// rough approximation: 1 token ≈ 4 chars
+const TOKEN_LIMIT       = parseInt(process.env.CONTEXT_TOKEN_LIMIT || '1000', 10);
+// rough approximation: 1 token ≈ 4 chars (1000 tokens is perfect for very fast mobile chat context)
 const CHAR_LIMIT        = TOKEN_LIMIT * 4;
 
 // ─── Personas ────────────────────────────────────────────────────────────────
@@ -33,15 +33,15 @@ async function summariseHistory(userId, model) {
   const history = db.getHistory(userId);
   if (totalChars(history) < CHAR_LIMIT) return history;
 
-  // keep last 6 messages always fresh, summarise the older chunk
-  const old   = history.slice(0, -6);
-  const fresh = history.slice(-6);
+  // keep last 4 messages always fresh, summarise the older chunk
+  const old   = history.slice(0, -4);
+  const fresh = history.slice(-4);
 
   const summaryPrompt = [
     {
       role: 'user',
       content:
-        'Summarise the following conversation in 3-5 sentences, retaining key facts and decisions:\n\n' +
+        'Please summarise these previous chat messages briefly in 1-2 paragraphs (keep facts and context):\n\n' +
         old.map(m => `${m.role}: ${m.content}`).join('\n'),
     },
   ];
@@ -61,7 +61,7 @@ async function summariseHistory(userId, model) {
     return newHistory;
   } catch {
     // summarisation failed — just trim oldest messages
-    const trimmed = history.slice(-12);
+    const trimmed = history.slice(-4);
     db.saveHistory(userId, trimmed);
     return trimmed;
   }

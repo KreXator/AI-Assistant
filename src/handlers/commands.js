@@ -237,8 +237,11 @@ async function handleMessage(bot, msg) {
   const label = router.modelLabel(model);
 
   try {
-    // ☕ Send a placeholder message because large/new models take a bit to load into RAM
-    const loadingMsg = await bot.sendMessage(msg.chat.id, `⏳ *Wczytywanie modelu \`${model}\`...*\nPierwsze wywołanie zajmuje więcej czasu na telefonie.`);
+    // ☕ Tylko dla dużych modeli dających o sobie znać wysyłamy loading, małe modele same dają radę po 1 rundzie
+    let loadingMsg = null;
+    if (model !== router.MODEL_SMALL) {
+      loadingMsg = await bot.sendMessage(msg.chat.id, `⏳ *Wczytywanie ${label} ${model}...*\nMoże zająć chwilę.`);
+    }
 
     // Keep sending 'typing' action every 5 seconds since it expires after ~5s in Telegram
     const typingInterval = setInterval(() => bot.sendChatAction(msg.chat.id, 'typing'), 5000);
@@ -251,7 +254,9 @@ async function handleMessage(bot, msg) {
     });
 
     clearInterval(typingInterval);
-    await bot.deleteMessage(msg.chat.id, loadingMsg.message_id).catch(() => {});
+    if (loadingMsg) {
+      await bot.deleteMessage(msg.chat.id, loadingMsg.message_id).catch(() => {});
+    }
 
     // Prefix with model label only for non-small calls, so user knows which model answered
     const prefixed = model !== router.MODEL_SMALL ? `${label}\n\n${reply}` : reply;
