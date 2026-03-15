@@ -26,45 +26,19 @@ function totalChars(messages) {
 }
 
 /**
- * Summarise old messages using the small model and collapse them
- * to a single assistant checkpoint message.
+ * Keeps history perfectly pruned to last 4 messages.
+ * On mobile, generating a summary with an LLM of previous text is too slow,
+ * so we just prune the old messages strictly.
  */
 async function summariseHistory(userId, model) {
   const history = db.getHistory(userId);
-  if (totalChars(history) < CHAR_LIMIT) return history;
+  
+  // Strict 4-message window for maximum speed on mobile
+  if (history.length <= 4) return history;
 
-  // keep last 4 messages always fresh, summarise the older chunk
-  const old   = history.slice(0, -4);
-  const fresh = history.slice(-4);
-
-  const summaryPrompt = [
-    {
-      role: 'user',
-      content:
-        'Please summarise these previous chat messages briefly in 1-2 paragraphs (keep facts and context):\n\n' +
-        old.map(m => `${m.role}: ${m.content}`).join('\n'),
-    },
-  ];
-
-  try {
-    const res = await axios.post(`${BASE_URL}/api/chat`, {
-      model,
-      messages: summaryPrompt,
-      stream:   false,
-    });
-    const summary = res.data.message.content;
-    const newHistory = [
-      { role: 'assistant', content: `[Conversation summary]: ${summary}` },
-      ...fresh,
-    ];
-    db.saveHistory(userId, newHistory);
-    return newHistory;
-  } catch {
-    // summarisation failed — just trim oldest messages
-    const trimmed = history.slice(-4);
-    db.saveHistory(userId, trimmed);
-    return trimmed;
-  }
+  const trimmed = history.slice(-4);
+  db.saveHistory(userId, trimmed);
+  return trimmed;
 };
 
 // ─── Main chat call ──────────────────────────────────────────────────────────
