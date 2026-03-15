@@ -2,6 +2,22 @@
 
 Osobisty asystent AI działający lokalnie na Android (Termux + Ollama), dostępny przez Telegram.
 
+## ⚡ Instalacja — jedna komenda w Termuxie
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/krexator/termux-ai-assistant/main/setup.sh | bash
+```
+
+Skrypt automatycznie:
+1. Instaluje brakujące zależności (Node.js, curl, git)
+2. Instaluje Ollama (jeśli nie ma)
+3. Ściąga najmniejszy działający model AI (~400MB)
+4. Pyta o Telegram Bot Token (wklej i Enter)
+5. Uruchamia bota — gotowy do rozmowy 🎉
+
+> Potrzebujesz tylko tokenu z [@BotFather](https://t.me/BotFather) na Telegramie.
+
+---
 ## Funkcjonalności
 
 - 💬 **Konwersacja** z pamięcią kontekstu (auto-summarisation gdy za długa)
