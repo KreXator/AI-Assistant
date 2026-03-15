@@ -268,7 +268,7 @@ function register(bot) {
       if (!isAllowed(msg.from.id)) {
         return bot.sendMessage(msg.chat.id, '🚫 Unauthorized.');
       }
-      return handler(bot, msg, match);
+      return handler(msg, match);
     };
   }
 
