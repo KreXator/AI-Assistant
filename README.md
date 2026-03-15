@@ -5,7 +5,7 @@ Osobisty asystent AI działający lokalnie na Android (Termux + Ollama), dostęp
 ## ⚡ Instalacja — jedna komenda w Termuxie
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/krexator/termux-ai-assistant/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/KreXator/Termux-AI-Assistant/main/setup.sh | bash
 ```
 
 Skrypt automatycznie:

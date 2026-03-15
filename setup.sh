@@ -2,7 +2,7 @@
 # ============================================================
 #  Termux AI Assistant — One-Shot Setup
 #  Usage in Termux:
-#    curl -fsSL https://raw.githubusercontent.com/krexator/termux-ai-assistant/main/setup.sh | bash
+#    curl -fsSL https://raw.githubusercontent.com/KreXator/Termux-AI-Assistant/main/setup.sh | bash
 # ============================================================
 set -e
 
@@ -122,7 +122,7 @@ elif [ -d "$INSTALL_DIR" ]; then
   info "Directory exists (no git). Keeping it as-is."
 else
   info "Cloning repository..."
-  git clone https://github.com/krexator/termux-ai-assistant.git "$INSTALL_DIR"
+  git clone https://github.com/KreXator/Termux-AI-Assistant.git "$INSTALL_DIR"
   success "Repository cloned to $INSTALL_DIR"
 fi
 
