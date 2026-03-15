@@ -103,7 +103,7 @@ else
 
   info "Also pulling $DEFAULT_MODEL_LARGE for complex tasks (~2GB)..."
   echo -n "Pull large model now? (takes longer, you can skip with 'n'): "
-  read -r PULL_LARGE
+  read -r PULL_LARGE < /dev/tty
   if [[ "$PULL_LARGE" != "n" && "$PULL_LARGE" != "N" ]]; then
     ollama pull "$DEFAULT_MODEL_LARGE" && success "Large model ready"
   else
@@ -146,7 +146,7 @@ else
   echo ""
   while true; do
     echo -n "  Paste your Telegram Bot Token: "
-    read -r TG_TOKEN
+    read -r TG_TOKEN < /dev/tty
     if [[ "$TG_TOKEN" =~ ^[0-9]+:[A-Za-z0-9_-]{35,}$ ]]; then
       success "Token format looks correct!"
       break
@@ -157,7 +157,7 @@ else
 
   echo ""
   echo -n "  Your Telegram User ID (optional, press Enter to skip — bot will accept anyone): "
-  read -r TG_USER_ID
+  read -r TG_USER_ID < /dev/tty
 
   # Write .env
   cat > .env << EOF
