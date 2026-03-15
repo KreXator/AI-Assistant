@@ -92,12 +92,24 @@ async function chat({ userId, userMessage, model, persona = 'default' }) {
     ...history.map(m => ({ role: m.role, content: m.content })),
   ];
 
-  // 5. call Ollama
-  const res = await axios.post(`${BASE_URL}/api/chat`, {
-    model,
-    messages,
-    stream: false,
-  });
+  // 5. call Ollama — 120s timeout (large models can be slow on mobile)
+  console.log(`[ollama] calling model=${model}, messages=${messages.length}`);
+  let res;
+  try {
+    res = await axios.post(`${BASE_URL}/api/chat`, {
+      model,
+      messages,
+      stream: false,
+    }, { timeout: 120_000 });
+  } catch (err) {
+    console.error('[ollama] axios error:', err.code || err.message);
+    throw err;
+  }
+
+  if (!res.data?.message?.content) {
+    console.error('[ollama] unexpected response:', JSON.stringify(res.data).slice(0, 200));
+    throw new Error('Empty response from Ollama');
+  }
 
   const reply = res.data.message.content;
 
