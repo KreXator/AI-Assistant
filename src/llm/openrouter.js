@@ -69,13 +69,20 @@ async function complete(localModel, messages) {
   const orModel = mapModel(localModel);
   console.log(`[openrouter] calling model=${orModel}, messages=${messages.length}`);
 
-  const res = await axios.post(`${BASE_URL}/chat/completions`, {
-    model:    orModel,
-    messages,
-  }, {
-    timeout: 180_000,
-    headers: orHeaders(),
-  });
+  let res;
+  try {
+    res = await axios.post(`${BASE_URL}/chat/completions`, {
+      model:    orModel,
+      messages,
+    }, {
+      timeout: 180_000,
+      headers: orHeaders(),
+    });
+  } catch (err) {
+    const detail = err.response?.data ? JSON.stringify(err.response.data).slice(0, 300) : err.message;
+    console.error(`[openrouter] HTTP ${err.response?.status} — ${detail}`);
+    throw err;
+  }
 
   const content = res.data?.choices?.[0]?.message?.content;
   if (!content) {
