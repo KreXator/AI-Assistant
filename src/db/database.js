@@ -8,7 +8,11 @@ const path   = require('path');
 const fs     = require('fs');
 const crypto = require('crypto');
 
-const DATA_DIR = path.resolve(process.env.DATA_DIR || './data');
+// Anchor to project root regardless of where the process was launched from.
+// __dirname = src/db/  →  ../../data = <project-root>/data
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(__dirname, '../../data');
 
 // Ensure data dir exists
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -19,6 +23,7 @@ const NOTES_FILE    = path.join(DATA_DIR, 'notes.json');
 const TODO_FILE     = path.join(DATA_DIR, 'todos.json');
 const CONFIG_FILE   = path.join(DATA_DIR, 'config.json');
 const SCHEDULE_FILE = path.join(DATA_DIR, 'schedules.json');
+const REMINDER_FILE = path.join(DATA_DIR, 'reminders.json');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -221,6 +226,32 @@ function getAllSchedules() {
   return Object.values(all).flat();
 }
 
+// ─── Reminders ───────────────────────────────────────────────────────────────
+
+/**
+ * Load all persisted reminders (array of { id, chatId, userId, text, fireAt }).
+ * Filters out already-expired entries automatically.
+ */
+function loadReminders() {
+  const all = loadJSON(REMINDER_FILE, []);
+  const now = Date.now();
+  return all.filter(r => new Date(r.fireAt).getTime() > now);
+}
+
+/**
+ * Persist the current reminder list (strip in-memory-only fields like timeoutId).
+ * @param {Array<{ id, chatId, userId, text, fireAt }>} list
+ */
+function saveReminders(list) {
+  saveJSON(REMINDER_FILE, list.map(r => ({
+    id:     r.id,
+    chatId: r.chatId,
+    userId: r.userId,
+    text:   r.text,
+    fireAt: r.fireAt,
+  })));
+}
+
 module.exports = {
   // history
   getHistory, saveHistory, appendMessage, clearHistory,
@@ -234,4 +265,6 @@ module.exports = {
   getConfig, setConfig,
   // schedules
   getSchedules, addSchedule, removeSchedule, getAllSchedules,
+  // reminders
+  loadReminders, saveReminders,
 };

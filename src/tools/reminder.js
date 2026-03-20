@@ -1,5 +1,5 @@
 /**
- * reminder.js — In-memory one-time reminder system
+ * reminder.js — One-time reminder system with persistence
  *
  * Supports:
  *   "30min"  → fires in 30 minutes
@@ -7,11 +7,14 @@
  *   "45s"    → fires in 45 seconds
  *   "17:30"  → fires at 17:30 today (or tomorrow if that time has passed)
  *
- * Reminders are NOT persisted across restarts (by design — keep it simple).
+ * Reminders are persisted to data/reminders.json and restored on bot startup.
+ * Expired reminders are discarded silently on restore.
  */
 'use strict';
 
-// Map of internalId → reminder object
+const db = require('../db/database');
+
+// Map of internalId → { timeoutId, chatId, userId, text, fireAt }
 const reminders = new Map();
 let nextId = 1;
 
@@ -65,23 +68,18 @@ function formatDelay(ms) {
   return rem > 0 ? `${h}h ${rem}min` : `${h}h`;
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /**
- * Add a new reminder.
- * @param {object} bot         — TelegramBot instance
- * @param {number} chatId
- * @param {number} userId
- * @param {string} text        — reminder message
- * @param {number} delayMs     — from parseTime()
- * @returns {{ id: number, fireAt: string, inMs: string }}
+ * Arm a single reminder: set the timeout, store in Map.
  */
-function add(bot, chatId, userId, text, delayMs) {
-  const id     = nextId++;
-  const fireAt = new Date(Date.now() + delayMs).toISOString();
+function armReminder(bot, { id, chatId, userId, text, fireAt }) {
+  const delayMs = new Date(fireAt).getTime() - Date.now();
+  if (delayMs <= 0) return; // already expired
 
   const timeoutId = setTimeout(async () => {
     reminders.delete(id);
+    persist();
     try {
       await bot.sendMessage(chatId, `⏰ *Reminder:* ${text}`, { parse_mode: 'Markdown' });
     } catch (err) {
@@ -90,6 +88,50 @@ function add(bot, chatId, userId, text, delayMs) {
   }, delayMs);
 
   reminders.set(id, { timeoutId, chatId, userId, text, fireAt });
+}
+
+/**
+ * Write current reminder state to disk (strips in-memory-only timeoutId).
+ */
+function persist() {
+  db.saveReminders([...reminders.values()]);
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Restore reminders from disk on bot startup. Call once with the bot instance.
+ * Expired reminders are skipped automatically (filtered in loadReminders).
+ * @param {TelegramBot} bot
+ */
+function init(bot) {
+  const saved = db.loadReminders();
+  for (const r of saved) {
+    armReminder(bot, r);
+  }
+  // Keep nextId above the highest restored id so there are no collisions
+  if (saved.length) {
+    const maxId = Math.max(...saved.map(r => r.id));
+    if (maxId >= nextId) nextId = maxId + 1;
+  }
+  console.log(`[reminder] Restored ${saved.length} reminder(s) from disk.`);
+}
+
+/**
+ * Add a new reminder.
+ * @param {TelegramBot} bot
+ * @param {number} chatId
+ * @param {number} userId
+ * @param {string} text       — reminder message
+ * @param {number} delayMs    — from parseTime()
+ * @returns {{ id: number, fireAt: string, inMs: string }}
+ */
+function add(bot, chatId, userId, text, delayMs) {
+  const id     = nextId++;
+  const fireAt = new Date(Date.now() + delayMs).toISOString();
+
+  armReminder(bot, { id, chatId, userId, text, fireAt });
+  persist();
 
   return { id, fireAt, inMs: formatDelay(delayMs) };
 }
@@ -120,7 +162,8 @@ function cancel(userId, pos) {
   const r = reminders.get(id);
   if (r) clearTimeout(r.timeoutId);
   reminders.delete(id);
+  persist();
   return text;
 }
 
-module.exports = { parseTime, formatDelay, add, list, cancel };
+module.exports = { init, parseTime, formatDelay, add, list, cancel };

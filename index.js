@@ -10,6 +10,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const ollama      = require('./src/llm/ollama');
 const commands    = require('./src/handlers/commands');
 const scheduler   = require('./src/scheduler/scheduler');
+const reminder    = require('./src/tools/reminder');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -33,8 +34,9 @@ async function main() {
 
   commands.register(bot);
 
-  // Restore scheduled searches from database
+  // Restore scheduled searches and reminders from disk
   scheduler.init(bot);
+  reminder.init(bot);
 
   bot.on('polling_error', err => {
     console.error('[Polling error]', err.code, err.message);
