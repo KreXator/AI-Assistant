@@ -7,8 +7,7 @@
 const axios = require('axios');
 const db    = require('../db/database');
 
-const BASE_URL    = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
-// History window: number of past messages to keep in context
+const BASE_URL       = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
 const HISTORY_WINDOW = parseInt(process.env.HISTORY_WINDOW || '10', 10);
 
 // ─── Personas ────────────────────────────────────────────────────────────────
@@ -35,8 +34,14 @@ async function pruneHistory(userId) {
 
 /**
  * Send a message to Ollama and return the assistant reply text.
+ * @param {object} opts
+ * @param {number}      opts.userId
+ * @param {string}      opts.userMessage
+ * @param {string}      opts.model
+ * @param {string}      [opts.persona]            — persona key from personas.json
+ * @param {string|null} [opts.customInstruction]  — overrides persona if set
  */
-async function chat({ userId, userMessage, model, persona = 'default' }) {
+async function chat({ userId, userMessage, model, persona = 'default', customInstruction = null }) {
   // 1. append user message
   db.appendMessage(userId, 'user', userMessage);
 
@@ -49,8 +54,9 @@ async function chat({ userId, userMessage, model, persona = 'default' }) {
     ? `\n\nKnown facts about the user:\n${memFacts.map(f => `- ${f.fact}`).join('\n')}`
     : '';
 
-  // 4. build messages array
-  const systemContent = getSystemPrompt(persona) + memBlock;
+  // 4. build messages array — custom instruction overrides persona
+  const basePrompt   = customInstruction || getSystemPrompt(persona);
+  const systemContent = basePrompt + memBlock;
   const messages = [
     { role: 'system', content: systemContent },
     ...history.map(m => ({ role: m.role, content: m.content })),

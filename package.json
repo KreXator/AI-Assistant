@@ -15,6 +15,7 @@
         "axios": "^1.13.6",
         "dotenv": "^17.3.1",
         "duck-duck-scrape": "^2.2.7",
+        "node-cron": "^4.2.1",
         "node-telegram-bot-api": "^0.67.0"
     }
 }
