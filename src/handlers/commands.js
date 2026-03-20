@@ -88,7 +88,16 @@ async function handleStart(bot, msg) {
     `Send a 🎤 voice message — I'll transcribe it\n` +
     `Send a 📷 photo — I'll describe it\n\n` +
     `*Dev*\n` +
-    `/run [code] — execute JS code`
+    `/run [code] — execute JS code\n\n` +
+    `*Memory tips*\n` +
+    `• Bot keeps ~50k tokens of conversation history automatically\n` +
+    `• /remember [fact] — save facts that survive /clear and restarts\n` +
+    `  _e.g._ \`/remember Prefer concise answers in Polish\`\n` +
+    `• /instruct [text] — set a permanent system persona\n` +
+    `  _e.g._ \`/instruct Always reply in Polish. Be concise.\`\n` +
+    `• /memory — show saved facts · /forget — erase all facts\n` +
+    `• /clear — wipe conversation only (facts + instruct stay)\n` +
+    `• /model premium — switch to paid model for complex tasks`
   );
 }
 

@@ -13,8 +13,17 @@ const db         = require('../db/database');
 const openrouter = require('./openrouter');
 const ollama     = require('./ollama');
 
-const PERSONAS       = require('../../config/personas.json');
-const HISTORY_WINDOW = parseInt(process.env.HISTORY_WINDOW || '10', 10);
+const PERSONAS = require('../../config/personas.json');
+
+// History limits:
+//   HISTORY_CHARS  — primary limit: total character budget across all messages.
+//                    1 token ≈ 4 chars; 200 000 chars ≈ 50 000 tokens.
+//                    Safe for any 131K-context model (Gemma 27B etc.) with room for
+//                    system prompt, memory block, and response.
+//   HISTORY_WINDOW — secondary cap: max number of messages regardless of chars.
+//                    Prevents pathological cases (e.g. 5000 one-liner messages).
+const HISTORY_CHARS  = parseInt(process.env.HISTORY_CHARS  || '200000', 10);
+const HISTORY_WINDOW = parseInt(process.env.HISTORY_WINDOW || '100',    10);
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -22,12 +31,31 @@ function getSystemPrompt(persona = 'default') {
   return PERSONAS[persona] || PERSONAS.default;
 }
 
+/**
+ * Trim conversation history to fit within HISTORY_CHARS + HISTORY_WINDOW.
+ * Always keeps the most recent messages; drops oldest first.
+ * Persists the trimmed result so the data file doesn't grow indefinitely.
+ */
 async function pruneHistory(userId) {
   const history = db.getHistory(userId);
-  if (history.length <= HISTORY_WINDOW) return history;
-  const trimmed = history.slice(-HISTORY_WINDOW);
-  db.saveHistory(userId, trimmed);
-  return trimmed;
+
+  // Walk backwards, accumulating chars until we hit the budget
+  let kept       = [];
+  let totalChars = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msgChars = (history[i].content || '').length;
+    if (totalChars + msgChars > HISTORY_CHARS) break;
+    kept.unshift(history[i]);
+    totalChars += msgChars;
+  }
+
+  // Apply message-count cap as a safety valve
+  if (kept.length > HISTORY_WINDOW) kept = kept.slice(-HISTORY_WINDOW);
+
+  // Persist trimmed version so the JSON file doesn't grow unboundedly
+  if (kept.length < history.length) db.saveHistory(userId, kept);
+
+  return kept;
 }
 
 /**
