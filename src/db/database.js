@@ -1,6 +1,6 @@
 /**
- * database.js — persistance layer using LowDB (pure JSON, Termux-safe)
- * Manages: conversation history, persistent memory, notes, todos
+ * database.js — JSON flat-file persistence layer
+ * Manages: conversation history, persistent memory, notes, todos, config
  */
 'use strict';
 
@@ -18,7 +18,7 @@ const NOTES_FILE   = path.join(DATA_DIR, 'notes.json');
 const TODO_FILE    = path.join(DATA_DIR, 'todos.json');
 const CONFIG_FILE  = path.join(DATA_DIR, 'config.json');
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function loadJSON(file, defaultVal) {
   if (!fs.existsSync(file)) {
@@ -33,7 +33,11 @@ function loadJSON(file, defaultVal) {
 }
 
 function saveJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error('[db] saveJSON failed for', file, ':', err.message);
+  }
 }
 
 // ─── Conversation History ────────────────────────────────────────────────────
@@ -98,8 +102,12 @@ function addNote(userId, note) {
 function deleteNote(userId, index) {
   const all  = loadJSON(NOTES_FILE, {});
   const uid  = String(userId);
-  if (all[uid] && all[uid][index]) all[uid].splice(index, 1);
-  saveJSON(NOTES_FILE, all);
+  if (all[uid] && index >= 0 && index < all[uid].length) {
+    all[uid].splice(index, 1);
+    saveJSON(NOTES_FILE, all);
+    return true;
+  }
+  return false;
 }
 
 // ─── Todos ───────────────────────────────────────────────────────────────────
@@ -117,11 +125,18 @@ function addTodo(userId, task) {
   saveJSON(TODO_FILE, all);
 }
 
+/**
+ * Mark todo at index as done. Returns true if the index was valid, false otherwise.
+ */
 function doneTodo(userId, index) {
   const all = loadJSON(TODO_FILE, {});
   const uid = String(userId);
-  if (all[uid] && all[uid][index]) all[uid][index].done = true;
-  saveJSON(TODO_FILE, all);
+  if (all[uid] && index >= 0 && index < all[uid].length) {
+    all[uid][index].done = true;
+    saveJSON(TODO_FILE, all);
+    return true;
+  }
+  return false;
 }
 
 function clearTodos(userId) {
@@ -130,13 +145,16 @@ function clearTodos(userId) {
   saveJSON(TODO_FILE, all);
 }
 
-// ─── Config (per-user settings: model, persona) ─────────────────────────────
+// ─── Config (per-user settings: model, persona, manualModel) ─────────────────
+
+const DEFAULT_MODEL = process.env.MODEL_SMALL || 'qwen2.5:3b-instruct-q4_K_M';
 
 function getConfig(userId) {
   const all = loadJSON(CONFIG_FILE, {});
   return all[String(userId)] || {
-    model:   process.env.MODEL_SMALL || 'llama3.2:3b',
-    persona: 'default',
+    model:       DEFAULT_MODEL,
+    persona:     'default',
+    manualModel: false,   // true when user has explicitly set a model via /model
   };
 }
 

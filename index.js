@@ -1,5 +1,5 @@
 /**
- * index.js — Entry point for Termux AI Assistant
+ * index.js — Entry point for Windows AI Assistant
  * Boot sequence: load env → check Ollama → start Telegram bot
  */
 'use strict';
@@ -22,13 +22,13 @@ async function main() {
   const alive = await ollama.isOllamaRunning();
   if (!alive) {
     console.warn('⚠️  Ollama is not responding at', process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434');
-    console.warn('   Start it in Termux with: ollama serve');
+    console.warn('   Start Ollama with: ollama serve');
     console.warn('   Continuing anyway — bot will report errors to Telegram.\n');
   } else {
     console.log('✅ Ollama is running.');
   }
 
-  // Long-polling mode — works fine without root / without opening ports
+  // Long-polling mode — works without opening any ports
   const bot = new TelegramBot(TOKEN, { polling: true });
 
   commands.register(bot);
@@ -42,10 +42,10 @@ async function main() {
     console.error('[Bot error]', err.message);
   });
 
-  console.log('🤖 Termux AI Assistant is running. Send /start on Telegram.');
-  console.log(`   Small model  (⚡): ${process.env.MODEL_SMALL || 'gemma2:2b'}`);
-  console.log(`   Medium model (🧠): ${process.env.MODEL_MEDIUM || 'llama3.1:8b'}`);
-  console.log(`   Large model  (💻): ${process.env.MODEL_LARGE || 'qwen2.5-coder:7b'}`);
+  console.log('🤖 Windows AI Assistant is running. Send /start on Telegram.');
+  console.log(`   Fast   model (💬): ${process.env.MODEL_SMALL  || 'qwen2.5:3b-instruct-q4_K_M'}`);
+  console.log(`   Medium model (⚡): ${process.env.MODEL_MEDIUM || 'qwen2.5:7b-instruct-q4_K_M'}`);
+  console.log(`   High   model (🧠): ${process.env.MODEL_LARGE  || 'qwen3:8b'}`);
 }
 
 main().catch(err => {

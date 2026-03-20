@@ -1,16 +1,15 @@
 /**
  * ollama.js — Ollama REST API client
- * Handles: streaming requests, context trimming, summarisation
+ * Handles: chat requests, context pruning, model listing
  */
 'use strict';
 
 const axios = require('axios');
 const db    = require('../db/database');
 
-const BASE_URL          = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
-const TOKEN_LIMIT       = parseInt(process.env.CONTEXT_TOKEN_LIMIT || '1000', 10);
-// rough approximation: 1 token ≈ 4 chars (1000 tokens is perfect for very fast mobile chat context)
-const CHAR_LIMIT        = TOKEN_LIMIT * 4;
+const BASE_URL    = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+// History window: number of past messages to keep in context
+const HISTORY_WINDOW = parseInt(process.env.HISTORY_WINDOW || '10', 10);
 
 // ─── Personas ────────────────────────────────────────────────────────────────
 const PERSONAS = require('../../config/personas.json');
@@ -19,27 +18,18 @@ function getSystemPrompt(persona = 'default') {
   return PERSONAS[persona] || PERSONAS.default;
 }
 
-// ─── Token / Length guard ────────────────────────────────────────────────────
-
-function totalChars(messages) {
-  return messages.reduce((s, m) => s + (m.content?.length || 0), 0);
-}
+// ─── History pruning ─────────────────────────────────────────────────────────
 
 /**
- * Keeps history perfectly pruned to last 4 messages.
- * On mobile, generating a summary with an LLM of previous text is too slow,
- * so we just prune the old messages strictly.
+ * Prune history to the last HISTORY_WINDOW messages to keep context manageable.
  */
-async function summariseHistory(userId, model) {
+async function pruneHistory(userId) {
   const history = db.getHistory(userId);
-  
-  // Strict 4-message window for maximum speed on mobile
-  if (history.length <= 4) return history;
-
-  const trimmed = history.slice(-4);
+  if (history.length <= HISTORY_WINDOW) return history;
+  const trimmed = history.slice(-HISTORY_WINDOW);
   db.saveHistory(userId, trimmed);
   return trimmed;
-};
+}
 
 // ─── Main chat call ──────────────────────────────────────────────────────────
 
@@ -50,8 +40,8 @@ async function chat({ userId, userMessage, model, persona = 'default' }) {
   // 1. append user message
   db.appendMessage(userId, 'user', userMessage);
 
-  // 2. get (possibly summarised) history
-  let history = await summariseHistory(userId, process.env.MODEL_SMALL || model);
+  // 2. get pruned history
+  const history = await pruneHistory(userId);
 
   // 3. inject persistent memory as context
   const memFacts = db.getMemory(userId);
@@ -66,7 +56,7 @@ async function chat({ userId, userMessage, model, persona = 'default' }) {
     ...history.map(m => ({ role: m.role, content: m.content })),
   ];
 
-  // 5. call Ollama — 120s timeout (large models can be slow on mobile)
+  // 5. call Ollama — 180s timeout (reasoning models generate think tokens)
   console.log(`[ollama] calling model=${model}, messages=${messages.length}`);
   let res;
   try {
@@ -74,7 +64,7 @@ async function chat({ userId, userMessage, model, persona = 'default' }) {
       model,
       messages,
       stream: false,
-    }, { timeout: 120_000 });
+    }, { timeout: 180_000 });
   } catch (err) {
     console.error('[ollama] axios error:', err.code || err.message);
     throw err;
@@ -85,9 +75,12 @@ async function chat({ userId, userMessage, model, persona = 'default' }) {
     throw new Error('Empty response from Ollama');
   }
 
-  const reply = res.data.message.content;
+  // 6. Strip Qwen3 <think>...</think> reasoning blocks before sending to user
+  const reply = res.data.message.content
+    .replace(/<think>[\s\S]*?<\/think>\s*/g, '')
+    .trim();
 
-  // 6. persist assistant response
+  // 7. persist assistant response
   db.appendMessage(userId, 'assistant', reply);
 
   return reply;
@@ -97,8 +90,13 @@ async function chat({ userId, userMessage, model, persona = 'default' }) {
  * List available models from local Ollama.
  */
 async function listModels() {
-  const res = await axios.get(`${BASE_URL}/api/tags`);
-  return (res.data.models || []).map(m => m.name);
+  try {
+    const res = await axios.get(`${BASE_URL}/api/tags`, { timeout: 5000 });
+    return (res.data.models || []).map(m => m.name);
+  } catch (err) {
+    console.error('[ollama] listModels error:', err.message);
+    return [];
+  }
 }
 
 /**

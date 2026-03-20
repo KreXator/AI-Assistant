@@ -1,19 +1,19 @@
 /**
  * router.js — Smart 3-tier model router
  *
- * SMALL  → gemma2:2b    — simple chat, notes, todos, quick Q&A   (~5-15s on mobile)
- * MEDIUM → llama3.1:8b  — analysis, conversation, general topics  (~30-90s)
- * LARGE  → qwen2.5-coder:7b — code generation, debugging, complex (~30-90s)
+ * SMALL  → qwen2.5:3b-instruct-q4_K_M  — simple chat, notes, todos, quick Q&A   (~2-8s)
+ * MEDIUM → qwen2.5:7b-instruct-q4_K_M  — analysis, conversation, general topics  (~10-30s)
+ * LARGE  → qwen3:8b                     — complex reasoning, code, hard problems   (~20-60s)
  *
  * Classification is purely heuristic (regex + length), zero LLM round-trips.
  */
 'use strict';
 
-const MODEL_SMALL  = process.env.MODEL_SMALL  || 'gemma2:2b';
-const MODEL_MEDIUM = process.env.MODEL_MEDIUM || 'llama3.1:8b';
-const MODEL_LARGE  = process.env.MODEL_LARGE  || 'qwen2.5-coder:7b';
+const MODEL_SMALL  = process.env.MODEL_SMALL  || 'qwen2.5:3b-instruct-q4_K_M';
+const MODEL_MEDIUM = process.env.MODEL_MEDIUM || 'qwen2.5:7b-instruct-q4_K_M';
+const MODEL_LARGE  = process.env.MODEL_LARGE  || 'qwen3:8b';
 
-// ── Coding patterns → always LARGE (qwen2.5-coder is purpose-built for this) ──
+// ── Coding patterns → always LARGE ────────────────────────────────────────────
 const CODING_PATTERNS = [
   /\bkod\b/i, /\bcode\b/i, /\bscript\b/i, /\bskrypt\b/i,
   /\bnapisa[ćc]\b.*\b(funkcj|kod|skrypt|program|class|function)\b/i,
@@ -66,7 +66,7 @@ function routeModel(message, override = null) {
   // Explicit simple signals → small model
   if (SIMPLE_PATTERNS.some(p => p.test(text))) return MODEL_SMALL;
 
-  // Coding → large (qwen2.5-coder)
+  // Coding / complex reasoning → large
   if (CODING_PATTERNS.some(p => p.test(text))) return MODEL_LARGE;
 
   // Analysis / longer texts → medium
@@ -81,9 +81,9 @@ function routeModel(message, override = null) {
  * Returns a human-readable label for the model tier.
  */
 function modelLabel(model) {
-  if (model === MODEL_LARGE)  return '💻 coder';
-  if (model === MODEL_MEDIUM) return '🧠 medium';
-  return '⚡ fast';
+  if (model === MODEL_LARGE)  return '🧠 high';
+  if (model === MODEL_MEDIUM) return '⚡ medium';
+  return '💬 fast';
 }
 
 module.exports = { routeModel, modelLabel, MODEL_SMALL, MODEL_MEDIUM, MODEL_LARGE };

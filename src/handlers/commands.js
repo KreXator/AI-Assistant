@@ -43,7 +43,7 @@ async function handleStart(bot, msg) {
     `👋 Hi ${name}! I'm your local AI assistant running on Ollama.\n\n` +
     `Type anything to chat. Available commands:\n\n` +
     `/help — show all commands\n` +
-    `/model [name] — switch model\n` +
+    `/model [name] — switch model (or no args to see current)\n` +
     `/models — list available models\n` +
     `/persona [name] — change personality\n` +
     `/memory — show remembered facts\n` +
@@ -51,6 +51,7 @@ async function handleStart(bot, msg) {
     `/forget — clear all memory\n` +
     `/notes — show notes\n` +
     `/note [text] — add a note\n` +
+    `/delnote [n] — delete note #n\n` +
     `/todo — show todo list\n` +
     `/task [text] — add a to-do item\n` +
     `/done [n] — mark todo #n done\n` +
@@ -74,13 +75,13 @@ async function handleStatus(bot, msg) {
   await sendLong(bot, msg.chat.id,
     `🖥 *System Status*\n\n` +
     `Ollama: ${alive ? '✅ running' : '❌ offline'}\n` +
-    `Active model: \`${cfg.model}\`\n` +
+    `Active model: \`${cfg.model}\`${cfg.manualModel ? ' _(manual)_' : ' _(auto-routed)_'}\n` +
     `Persona: ${cfg.persona}\n` +
     `Available models: ${models.length ? models.join(', ') : 'none detected'}\n` +
-    `Router:\n` +
-    `  ⚡ small=\`${router.MODEL_SMALL}\`\n` +
-    `  🧠 medium=\`${router.MODEL_MEDIUM}\`\n` +
-    `  💻 large=\`${router.MODEL_LARGE}\``
+    `Router tiers:\n` +
+    `  💬 small=\`${router.MODEL_SMALL}\`\n` +
+    `  ⚡ medium=\`${router.MODEL_MEDIUM}\`\n` +
+    `  🧠 large=\`${router.MODEL_LARGE}\``
   );
 }
 
@@ -95,11 +96,18 @@ async function handleModel(bot, msg, args) {
   const userId = msg.from.id;
   if (!args.length) {
     const cfg = db.getConfig(userId);
-    return bot.sendMessage(msg.chat.id, `Current model: \`${cfg.model}\``);
+    return bot.sendMessage(msg.chat.id,
+      `Current model: \`${cfg.model}\` ${cfg.manualModel ? '_(manual override)_' : '_(auto-routed)_'}\n` +
+      `Use \`/model auto\` to re-enable auto-routing.`
+    );
   }
   const modelName = args.join(' ');
-  db.setConfig(userId, { model: modelName });
-  await bot.sendMessage(msg.chat.id, `✅ Model switched to \`${modelName}\`. (Manual override active.)`);
+  if (modelName === 'auto') {
+    db.setConfig(userId, { model: router.MODEL_SMALL, manualModel: false });
+    return bot.sendMessage(msg.chat.id, '✅ Auto-routing re-enabled.');
+  }
+  db.setConfig(userId, { model: modelName, manualModel: true });
+  await bot.sendMessage(msg.chat.id, `✅ Model switched to \`${modelName}\`. Auto-routing disabled.\nUse \`/model auto\` to re-enable.`);
 }
 
 async function handleModels(bot, msg) {
@@ -109,7 +117,7 @@ async function handleModels(bot, msg) {
   await sendLong(bot, msg.chat.id,
     models.length
       ? `🤖 *Available models:*\n${models.map(m => `• \`${m}\``).join('\n')}`
-      : 'No models found. Run `ollama pull llama3` in Termux.'
+      : 'No models found. Run `ollama pull qwen3:8b` in your terminal.'
   );
 }
 
@@ -159,6 +167,16 @@ async function handleNote(bot, msg, args) {
   await bot.sendMessage(msg.chat.id, '✅ Note saved!');
 }
 
+async function handleDelNote(bot, msg, args) {
+  const n = parseInt(args[0], 10);
+  if (isNaN(n) || n < 1)
+    return bot.sendMessage(msg.chat.id, 'Usage: /delnote [note number]');
+  const deleted = db.deleteNote(msg.from.id, n - 1);
+  if (!deleted)
+    return bot.sendMessage(msg.chat.id, `❌ No note #${n}. Use /notes to see your list.`);
+  await bot.sendMessage(msg.chat.id, `🗑 Note #${n} deleted.`);
+}
+
 // ─── Todos ───────────────────────────────────────────────────────────────────
 
 async function handleTodos(bot, msg) {
@@ -182,7 +200,9 @@ async function handleDone(bot, msg, args) {
   const n = parseInt(args[0], 10);
   if (isNaN(n) || n < 1)
     return bot.sendMessage(msg.chat.id, 'Usage: /done [task number]');
-  db.doneTodo(msg.from.id, n - 1);
+  const marked = db.doneTodo(msg.from.id, n - 1);
+  if (!marked)
+    return bot.sendMessage(msg.chat.id, `❌ No task #${n}. Use /todo to see your list.`);
   await bot.sendMessage(msg.chat.id, `✅ Task #${n} marked as done.`);
 }
 
@@ -200,6 +220,14 @@ async function handleSearch(bot, msg, args) {
 // ─── Code Execution ──────────────────────────────────────────────────────────
 
 async function handleRun(bot, msg, args) {
+  // Security: refuse if no allowed IDs are configured
+  if (!ALLOWED_IDS.length) {
+    return bot.sendMessage(msg.chat.id,
+      '⚠️ `/run` is disabled: set `ALLOWED_USER_IDS` in `.env` first.\n' +
+      'This command executes code with full system privileges.',
+      { parse_mode: 'Markdown' }
+    );
+  }
   const code = args.join(' ');
   if (!code) return bot.sendMessage(msg.chat.id, 'Usage: /run [js code]');
   await bot.sendMessage(msg.chat.id, '⚙️ Running...');
@@ -217,13 +245,13 @@ async function handleMessage(bot, msg) {
   // Show typing indicator
   await bot.sendChatAction(msg.chat.id, 'typing');
 
-  const cfg         = db.getConfig(userId);
-  const isAutoModel = [router.MODEL_SMALL, router.MODEL_MEDIUM, router.MODEL_LARGE].includes(cfg.model);
-  const manualModel = !isAutoModel ? cfg.model : null;
+  const cfg = db.getConfig(userId);
+  // Use manual model if user explicitly set one, otherwise auto-route
+  const manualModel = cfg.manualModel ? cfg.model : null;
 
   // Decide: web search needed?
   const needsSearch = /\b(search|wyszukaj|google|find|znajdź).+\b/i.test(text) ||
-                      /\bco to jest\b/i.test(text) && text.length > 40;
+                      (/\bco to jest\b/i.test(text) && text.length > 40);
 
   let enriched = text;
   if (needsSearch) {
@@ -236,15 +264,15 @@ async function handleMessage(bot, msg) {
   const model = manualModel || router.routeModel(text, null);
   const label = router.modelLabel(model);
 
+  let typingInterval;
+  let loadingMsg = null;
   try {
-    // ☕ Tylko dla dużych modeli dających o sobie znać wysyłamy loading, małe modele same dają radę po 1 rundzie
-    let loadingMsg = null;
     if (model !== router.MODEL_SMALL) {
-      loadingMsg = await bot.sendMessage(msg.chat.id, `⏳ *Wczytywanie ${label} ${model}...*\nMoże zająć chwilę.`);
+      loadingMsg = await bot.sendMessage(msg.chat.id, `⏳ *${label} — ${model}...*`);
     }
 
-    // Keep sending 'typing' action every 5 seconds since it expires after ~5s in Telegram
-    const typingInterval = setInterval(() => bot.sendChatAction(msg.chat.id, 'typing'), 5000);
+    // Keep sending 'typing' action every 5 seconds (expires after ~5s in Telegram)
+    typingInterval = setInterval(() => bot.sendChatAction(msg.chat.id, 'typing'), 5000);
 
     const reply = await ollama.chat({
       userId,
@@ -258,13 +286,17 @@ async function handleMessage(bot, msg) {
       await bot.deleteMessage(msg.chat.id, loadingMsg.message_id).catch(() => {});
     }
 
-    // Prefix with model label only for non-small calls, so user knows which model answered
+    // Prefix with model label only for non-small calls
     const prefixed = model !== router.MODEL_SMALL ? `${label}\n\n${reply}` : reply;
     await sendLong(bot, msg.chat.id, prefixed);
   } catch (err) {
+    clearInterval(typingInterval);
+
     let errMsg = `❌ Error: ${err.message}`;
-    if (err.code === 'ECONNREFUSED') errMsg = '❌ Cannot reach Ollama. Start it with: `ollama serve`';
-    if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) errMsg = `⏱️ *Timeout!* Model \`${model}\` jest zbyt duży lub telefon go nie ogarnął w 120s. Użyj lżejszego modelu mniejszego (komenda /model).`;
+    if (err.code === 'ECONNREFUSED')
+      errMsg = '❌ Cannot reach Ollama. Make sure it is running: `ollama serve`';
+    if (err.code === 'ECONNABORTED' || err.message?.includes('timeout'))
+      errMsg = `⏱️ *Timeout!* Model \`${model}\` did not respond within 180s.\nTry a lighter model with \`/model qwen2.5:7b-instruct-q4_K_M\` or \`/model auto\`.`;
 
     await bot.sendMessage(msg.chat.id, errMsg, { parse_mode: 'Markdown' });
   }
@@ -279,10 +311,7 @@ function register(bot) {
   // Middleware: auth check
   function guard(handler) {
     return async (msg, match) => {
-      // Telegram w niektórych typach zdarzeń (np. my_chat_member)
-      // nie wysyła pełnego obiektu message, wyłapujemy to, by uniknąć crash'u.
       if (!msg || !msg.chat || !msg.chat.id || !msg.from) return;
-
       if (!isAllowed(msg.from.id)) {
         return bot.sendMessage(msg.chat.id, '🚫 Unauthorized.');
       }
@@ -310,6 +339,8 @@ function register(bot) {
   bot.onText(/^\/notes?/, guard(m => handleNotes(bot, m)));
   bot.onText(/^\/note(?:\s+(.+))?$/, guard((m, match) =>
     handleNote(bot, m, match[1]?.trim().split(/\s+/) || [])));
+  bot.onText(/^\/delnote(?:\s+(\d+))?$/, guard((m, match) =>
+    handleDelNote(bot, m, match[1] ? [match[1]] : [])));
 
   bot.onText(/^\/todos?/, guard(m => handleTodos(bot, m)));
   bot.onText(/^\/task(?:\s+(.+))?$/, guard((m, match) =>
