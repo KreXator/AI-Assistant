@@ -1,109 +1,181 @@
-# Termux AI Assistant
+# AI Assistant
 
-Osobisty asystent AI działający lokalnie na Android (Termux + Ollama), dostępny przez Telegram.
-
-## ⚡ Instalacja — jedna komenda w Termuxie
-
-```bash
-curl -sLO https://raw.githubusercontent.com/KreXator/Termux-AI-Assistant/main/setup.sh && bash setup.sh
-```
-
-Skrypt automatycznie:
-1. Instaluje brakujące zależności (Node.js, curl, git)
-2. Instaluje Ollama (jeśli nie ma)
-3. Ściąga najmniejszy działający model AI (~400MB)
-4. Pyta o Telegram Bot Token (wklej i Enter)
-5. Uruchamia bota — gotowy do rozmowy 🎉
-
-> Potrzebujesz tylko tokenu z [@BotFather](https://t.me/BotFather) na Telegramie.
+Personal AI assistant running locally via Ollama, accessible through Telegram.
+Designed for Windows but works on any OS with Node.js and Ollama.
 
 ---
-## Funkcjonalności
 
-- 💬 **Konwersacja** z pamięcią kontekstu (auto-summarisation gdy za długa)
-- 🧠 **Pamięć persystentna** faktów o Tobie (`/remember`, `/memory`, `/forget`)
-- 📝 **Notatki** (`/note`, `/notes`)
-- ✅ **Todo list** (`/task`, `/todo`, `/done`)
-- 🔍 **Web search** DuckDuckGo bez klucza API (`/search` lub auto)
-- ⚡ **Inteligentny routing modeli** — mały model do prostych zadań, duży do kodowania
-- 💻 **Code execution** — bot pisze i odpala kod JS (`/run`)
-- 🎭 **Persony** — zmień charakter asystenta (`/persona coder`, `/persona planner`)
-- 🔀 **Multi-model** — przełącz model ręcznie (`/model llama3:8b`)
+## Quick Start
 
-## Konfiguracja (.env)
+```powershell
+git clone https://github.com/KreXator/Termux-AI-Assistant.git ai-assistant
+cd ai-assistant
+.\start.ps1   # creates .env, installs deps, starts Ollama, launches bot
+```
 
-| Zmienna | Opis | Domyślnie |
+> You only need a token from [@BotFather](https://t.me/BotFather) on Telegram.
+
+---
+
+## Features
+
+| Feature | Description |
+|---|---|
+| 💬 **Chat** | Context-aware conversation with pruned history window |
+| 🧠 **Persistent memory** | Facts about you survive restarts (`/remember`, `/memory`) |
+| 📝 **Notes** | `/note`, `/notes`, `/delnote` |
+| ✅ **Todo list** | `/task`, `/todo`, `/done` |
+| 🔍 **Web search** | Serper (Google) or DuckDuckGo fallback, auto-triggered or `/search` |
+| 📅 **Scheduled searches** | Daily alerts at set times (`/schedule add HH:MM [query]`) |
+| ⏰ **Reminders** | One-time reminders, persist across restarts (`/remind 30min ...`) |
+| 🌤️ **Weather** | Current conditions via Open-Meteo, no API key needed (`/weather`) |
+| 🎤 **Voice** | Send a voice message — transcribed via Groq Whisper, then answered |
+| 📷 **Image analysis** | Send a photo — described by local vision model (llava) |
+| ⚡ **Auto model routing** | Small model for simple tasks, large for code/reasoning |
+| 🎭 **Personas** | `/persona coder`, `planner`, `researcher`, `polish`, `default` |
+| 🔧 **Custom instructions** | Override persona via Telegram (`/instruct`) |
+| 💻 **Code execution** | Run JS snippets directly (`/run`) |
+
+---
+
+## Configuration (`.env`)
+
+Copy `.env.example` → `.env` and fill in:
+
+| Variable | Description | Default |
 |---|---|---|
-| `TELEGRAM_BOT_TOKEN` | Token bota z @BotFather | — |
-| `ALLOWED_USER_IDS` | Dozwolone ID (puste = wszyscy) | — |
-| `OLLAMA_BASE_URL` | Adres Ollamy | `http://127.0.0.1:11434` |
-| `MODEL_SMALL` | Szybki model (proste zadania) | `llama3.2:3b` |
-| `MODEL_LARGE` | Mocny model (kodowanie, analiza) | `llama3:8b` |
-| `CONTEXT_TOKEN_LIMIT` | Próg tokenów do sumaryzacji | `3000` |
+| `TELEGRAM_BOT_TOKEN` | Token from @BotFather | **required** |
+| `ALLOWED_USER_IDS` | Comma-separated Telegram IDs (empty = open) | — |
+| `OLLAMA_BASE_URL` | Ollama endpoint | `http://127.0.0.1:11434` |
+| `MODEL_SMALL` | Fast model — simple tasks | `qwen2.5:3b-instruct-q4_K_M` |
+| `MODEL_MEDIUM` | Mid model — general use | `qwen2.5:7b-instruct-q4_K_M` |
+| `MODEL_LARGE` | Heavy model — coding, reasoning | `qwen3:8b` |
+| `VISION_MODEL` | Vision model for image analysis | `llava:7b` |
+| `HISTORY_WINDOW` | Conversation messages kept per user | `10` |
+| `SERPER_API_KEY` | Google search (optional, free tier) | — |
+| `GROQ_API_KEY` | Voice transcription (optional, free tier) | — |
+| `TZ` | Timezone for scheduled tasks | `Europe/Warsaw` |
 
-## Routing modeli (automatyczny)
+---
 
-Bot automatycznie wybiera model na podstawie treści wiadomości:
+## Model Routing (automatic)
 
-| Task | Model |
+| Task type | Model used |
 |---|---|
-| Czat, notatki, todo, pamięć | ⚡ `MODEL_SMALL` |
-| Kodowanie, debugging, analiza | 🧠 `MODEL_LARGE` |
-| Długie wiadomości (>200 znaków) | 🧠 `MODEL_LARGE` |
-| Ręczny override `/model name` | Ustawiony przez użytkownika |
+| Chat, notes, todos, memory, weather | 💬 `MODEL_SMALL` |
+| Research, scheduling, medium tasks | ⚡ `MODEL_MEDIUM` |
+| Code, debugging, complex reasoning | 🧠 `MODEL_LARGE` |
+| Manual override `/model name` | User-specified |
 
-## Komendy
+---
 
-| Komenda | Opis |
-|---|---|
-| `/start` | Pomoc i lista komend |
-| `/status` | Status systemu (Ollama, modele) |
-| `/clear` | Wyczyść kontekst rozmowy |
-| `/model [name]` | Przełącz model Ollama |
-| `/models` | Lista dostępnych modeli |
-| `/persona [name]` | Zmień osobowość (`default`, `coder`, `polish`, `researcher`, `planner`) |
-| `/remember [fakt]` | Zapisz fakt o sobie |
-| `/memory` | Pokaż zapamiętane fakty |
-| `/forget` | Wyczyść pamięć |
-| `/note [tekst]` | Dodaj notatkę |
-| `/notes` | Pokaż notatki |
-| `/task [tekst]` | Dodaj zadanie do listy |
-| `/todo` | Pokaż listę zadań |
-| `/done [n]` | Oznacz zadanie n jako done |
-| `/search [query]` | Szukaj w DuckDuckGo |
-| `/run [kod JS]` | Uruchom kod JavaScript |
+## Commands
 
-## Struktura projektu
+**Core**
+```
+/start · /help · /status · /clear
+```
+
+**Models & Persona**
+```
+/model [name|auto]    — switch model or re-enable auto-routing
+/models               — list available Ollama models
+/persona [name]       — change personality
+/instruct [text]      — set custom system instruction
+/instruct show|clear  — view or remove it
+```
+
+**Memory**
+```
+/remember [fact]  — save a fact about yourself
+/memory           — show remembered facts
+/forget           — clear all memory
+```
+
+**Notes & Todos**
+```
+/note [text]      — add a note
+/notes            — list notes
+/delnote [n]      — delete note #n
+/task [text]      — add a todo
+/todo             — list todos
+/done [n]         — mark todo #n done
+```
+
+**Search & Automation**
+```
+/search [query]              — web search now
+/schedule add HH:MM [query]  — daily search alert
+/schedule test [n]           — run schedule immediately
+/schedule del [n]            — remove schedule
+/schedules                   — list active schedules
+```
+
+**Reminders**
+```
+/remind 30min [text]   — reminder in 30 minutes
+/remind 2h [text]      — reminder in 2 hours
+/remind 17:30 [text]   — reminder at specific time
+/reminders             — list active reminders
+/remindel [n]          — cancel reminder #n
+```
+
+**Weather & Media**
+```
+/weather [city]     — current weather (Open-Meteo, no key needed)
+[voice message]     — transcribed + answered (requires GROQ_API_KEY)
+[photo]             — image description (requires vision model in Ollama)
+```
+
+**Dev**
+```
+/run [js code]   — execute JavaScript (requires ALLOWED_USER_IDS)
+```
+
+---
+
+## Project Structure
 
 ```
-termux-ai-assistant/
+ai-assistant/
 ├── index.js                  # Entry point
+├── start.ps1                 # Windows PowerShell launcher
 ├── config/
-│   └── personas.json         # System prompts
+│   └── personas.json         # System prompt templates
 ├── src/
 │   ├── agent/
-│   │   └── router.js         # Inteligentny routing modeli
+│   │   └── router.js         # Automatic model routing
 │   ├── db/
-│   │   └── database.js       # JSON persistence layer
+│   │   └── database.js       # JSON flat-file persistence
 │   ├── handlers/
 │   │   └── commands.js       # Telegram command handlers
 │   ├── llm/
-│   │   └── ollama.js         # Ollama client + summarisation
+│   │   └── ollama.js         # Ollama REST client
+│   ├── scheduler/
+│   │   └── scheduler.js      # Cron-based scheduled searches
 │   └── tools/
-│       ├── search.js         # DuckDuckGo web search
-│       └── coder.js          # JS code execution
-└── data/                     # JSON data files (gitignored)
+│       ├── search.js         # Web search (Serper + DDG fallback)
+│       ├── coder.js          # JS code execution
+│       ├── reminder.js       # One-time reminders with persistence
+│       ├── weather.js        # Open-Meteo weather
+│       ├── voice.js          # Groq Whisper transcription
+│       └── vision.js         # Ollama vision model
+└── data/                     # Persisted user data (gitignored)
     ├── chat.json
     ├── memory.json
     ├── notes.json
     ├── todos.json
-    └── config.json
+    ├── config.json
+    ├── schedules.json
+    └── reminders.json
 ```
 
-## Działanie w tle (Termux)
+---
 
-```bash
-# Zainstaluj termux-services lub użyj nohup
-nohup npm start > assistant.log 2>&1 &
-echo "Bot PID: $!"
+## Running as a Windows Service (optional)
+
+```powershell
+winget install nssm
+nssm install "AI-Assistant" powershell.exe "-NoProfile -File C:\path\to\ai-assistant\start.ps1"
+nssm start "AI-Assistant"
 ```

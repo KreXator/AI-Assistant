@@ -1,8 +1,8 @@
 /**
- * coder.js — Safe code execution tool (Termux sandboxed)
+ * coder.js — Safe JavaScript code execution tool
  *
  * Allows the agent to write and run JS code snippets/scripts
- * inside the Termux process and return stdout/stderr results.
+ * in a sandboxed child process and return stdout/stderr results.
  *
  * SAFETY: only runs if the user explicitly asks, code is sandboxed via
  * a child process with a hard 10-second timeout.
