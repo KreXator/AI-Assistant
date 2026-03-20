@@ -16,10 +16,10 @@ Set-Location $ProjectRoot
 
 Write-Host ""
 Write-Host "  Windows AI Assistant" -ForegroundColor Cyan
-Write-Host "  ─────────────────────────────────" -ForegroundColor DarkGray
+Write-Host "  ---------------------------------" -ForegroundColor DarkGray
 Write-Host ""
 
-# ── 1. .env check ─────────────────────────────────────────────────────────────
+# -- 1. .env check -------------------------------------------------------------
 if (-not (Test-Path ".env")) {
     if (Test-Path ".env.example") {
         Copy-Item ".env.example" ".env"
@@ -33,7 +33,7 @@ if (-not (Test-Path ".env")) {
     }
 }
 
-# ── 2. node_modules check ─────────────────────────────────────────────────────
+# -- 2. node_modules check -----------------------------------------------------
 if (-not (Test-Path "node_modules")) {
     Write-Host "  [setup] node_modules not found. Running npm install..." -ForegroundColor Yellow
     npm install
@@ -43,7 +43,7 @@ if (-not (Test-Path "node_modules")) {
     }
 }
 
-# ── 3. Ollama check ───────────────────────────────────────────────────────────
+# -- 3. Ollama check -----------------------------------------------------------
 $ollamaUp = $false
 try {
     $resp = Invoke-WebRequest -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
@@ -55,7 +55,6 @@ try {
 if (-not $ollamaUp) {
     Write-Host "  [ollama] Not running. Attempting to start..." -ForegroundColor Yellow
 
-    # Check if ollama.exe is available
     $ollamaExe = Get-Command ollama -ErrorAction SilentlyContinue
     if ($ollamaExe) {
         Start-Process ollama -ArgumentList "serve" -WindowStyle Hidden
@@ -67,10 +66,10 @@ if (-not $ollamaUp) {
         exit 1
     }
 } else {
-    Write-Host "  [ollama] Running ✓" -ForegroundColor Green
+    Write-Host "  [ollama] Running OK" -ForegroundColor Green
 }
 
-# ── 4. Start the bot ──────────────────────────────────────────────────────────
+# -- 4. Start the bot ----------------------------------------------------------
 Write-Host "  [bot]    Starting Windows AI Assistant..." -ForegroundColor Cyan
 Write-Host ""
 node index.js
