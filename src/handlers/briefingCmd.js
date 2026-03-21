@@ -136,7 +136,7 @@ async function handle(bot, msg, args) {
 
   // ── /briefing remove <label> ──────────────────────────────────────────────
   if (sub === 'remove') {
-    const label = args[1];
+    const label = args.slice(1).join(' ');
     if (!label) {
       return bot.sendMessage(chatId, 'Użycie: `/briefing remove <label>`', { parse_mode: 'Markdown' });
     }
