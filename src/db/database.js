@@ -17,13 +17,16 @@ const DATA_DIR = process.env.DATA_DIR
 // Ensure data dir exists
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const CHAT_FILE     = path.join(DATA_DIR, 'chat.json');
-const MEMORY_FILE   = path.join(DATA_DIR, 'memory.json');
-const NOTES_FILE    = path.join(DATA_DIR, 'notes.json');
-const TODO_FILE     = path.join(DATA_DIR, 'todos.json');
-const CONFIG_FILE   = path.join(DATA_DIR, 'config.json');
-const SCHEDULE_FILE = path.join(DATA_DIR, 'schedules.json');
-const REMINDER_FILE = path.join(DATA_DIR, 'reminders.json');
+const CHAT_FILE          = path.join(DATA_DIR, 'chat.json');
+const MEMORY_FILE        = path.join(DATA_DIR, 'memory.json');
+const NOTES_FILE         = path.join(DATA_DIR, 'notes.json');
+const TODO_FILE          = path.join(DATA_DIR, 'todos.json');
+const CONFIG_FILE        = path.join(DATA_DIR, 'config.json');
+const SCHEDULE_FILE      = path.join(DATA_DIR, 'schedules.json');
+const REMINDER_FILE      = path.join(DATA_DIR, 'reminders.json');
+const BRIEFING_FEEDS_FILE  = path.join(DATA_DIR, 'briefing_feeds.json');
+const BRIEFING_SEEN_FILE   = path.join(DATA_DIR, 'briefing_seen.json');
+const BRIEFING_CFG_FILE    = path.join(DATA_DIR, 'briefing_config.json');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -252,6 +255,79 @@ function saveReminders(list) {
   })));
 }
 
+// ─── Briefing Feeds ──────────────────────────────────────────────────────────
+
+function getBriefingFeeds(userId) {
+  const all = loadJSON(BRIEFING_FEEDS_FILE, {});
+  return all[String(userId)] || [];
+}
+
+function addBriefingFeed(userId, url, label, category = 'general') {
+  const all = loadJSON(BRIEFING_FEEDS_FILE, {});
+  const uid = String(userId);
+  if (!all[uid]) all[uid] = [];
+  // prevent duplicate labels
+  all[uid] = all[uid].filter(f => f.label !== label);
+  all[uid].push({ url, label, category, ts: new Date().toISOString() });
+  saveJSON(BRIEFING_FEEDS_FILE, all);
+}
+
+function removeBriefingFeed(userId, label) {
+  const all = loadJSON(BRIEFING_FEEDS_FILE, {});
+  const uid = String(userId);
+  if (!all[uid]) return false;
+  const before = all[uid].length;
+  all[uid] = all[uid].filter(f => f.label !== label);
+  saveJSON(BRIEFING_FEEDS_FILE, all);
+  return all[uid].length < before;
+}
+
+// ─── Briefing Seen IDs (deduplication) ───────────────────────────────────────
+
+const SEEN_MAX = 2000; // keep last N item IDs per user
+
+function getBriefingSeenIds(userId) {
+  const all = loadJSON(BRIEFING_SEEN_FILE, {});
+  return new Set(all[String(userId)] || []);
+}
+
+function markBriefingSeen(userId, ids) {
+  const all = loadJSON(BRIEFING_SEEN_FILE, {});
+  const uid = String(userId);
+  const current = all[uid] || [];
+  const merged  = [...new Set([...current, ...ids])];
+  // prune oldest if over cap
+  all[uid] = merged.length > SEEN_MAX ? merged.slice(-SEEN_MAX) : merged;
+  saveJSON(BRIEFING_SEEN_FILE, all);
+}
+
+// ─── Briefing Config (per-user schedule + preferences) ───────────────────────
+
+const DEFAULT_BRIEFING_CFG = {
+  morningTime: '08:00',
+  eveningTime: '20:00',
+  morningEnabled: false,
+  eveningEnabled: false,
+  chatId: null,
+};
+
+function getBriefingConfig(userId) {
+  const all = loadJSON(BRIEFING_CFG_FILE, {});
+  return { ...DEFAULT_BRIEFING_CFG, ...(all[String(userId)] || {}) };
+}
+
+function setBriefingConfig(userId, updates) {
+  const all = loadJSON(BRIEFING_CFG_FILE, {});
+  const uid = String(userId);
+  all[uid]  = { ...getBriefingConfig(userId), ...updates };
+  saveJSON(BRIEFING_CFG_FILE, all);
+}
+
+function getAllBriefingConfigs() {
+  const all = loadJSON(BRIEFING_CFG_FILE, {});
+  return Object.entries(all).map(([userId, cfg]) => ({ userId: Number(userId), ...cfg }));
+}
+
 module.exports = {
   // history
   getHistory, saveHistory, appendMessage, clearHistory,
@@ -267,4 +343,8 @@ module.exports = {
   getSchedules, addSchedule, removeSchedule, getAllSchedules,
   // reminders
   loadReminders, saveReminders,
+  // briefing
+  getBriefingFeeds, addBriefingFeed, removeBriefingFeed,
+  getBriefingSeenIds, markBriefingSeen,
+  getBriefingConfig, setBriefingConfig, getAllBriefingConfigs,
 };

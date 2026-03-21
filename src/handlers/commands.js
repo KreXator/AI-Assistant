@@ -11,8 +11,9 @@ const openrouter = require('../llm/openrouter');
 const router     = require('../agent/router');
 const search    = require('../tools/search');
 const coder     = require('../tools/coder');
-const scheduler = require('../scheduler/scheduler');
-const reminder  = require('../tools/reminder');
+const scheduler        = require('../scheduler/scheduler');
+const reminder         = require('../tools/reminder');
+const briefingCmd      = require('./briefingCmd');
 const weather   = require('../tools/weather');
 const voice     = require('../tools/voice');
 const vision    = require('../tools/vision');
@@ -682,6 +683,9 @@ function register(bot) {
 
   bot.onText(/^\/weather(?:\s+(.+))?$/, guard((m, match) =>
     handleWeather(bot, m, match[1]?.trim().split(/\s+/) || [])));
+
+  bot.onText(/^\/briefing(?:\s+([\s\S]+))?$/, guard((m, match) =>
+    briefingCmd.handle(bot, m, match[1]?.trim().split(/\s+/) || [])));
 
   bot.on('message', guard(m => {
     // Voice message
