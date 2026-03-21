@@ -28,32 +28,37 @@ const ALLOWED_IDS = (process.env.ALLOWED_USER_IDS || '')
 const pendingIntents = new Map();
 const CONFIRMATION_TTL = 90_000; // 90 seconds — auto-expire pending confirmations
 
+/** Escape Telegram Markdown V1 special chars in user-supplied text. */
+function esc(text) {
+  return String(text || '').replace(/[*_`[\]]/g, '\\$&');
+}
+
 /** Human-readable summary of a detected intent, shown before user confirms. */
 function formatConfirmation(type, lang, params) {
   const pl = lang !== 'en';
   switch (type) {
     case 'briefing_add_feed':
-      return `${pl ? 'Dodaj feed' : 'Add feed'} *${params.label || '?'}*\n` +
-             `URL: \`${params.url || '?'}\`\n` +
-             `${pl ? 'Kategoria' : 'Category'}: *${params.category || 'general'}*`;
+      return `${pl ? 'Dodaj feed' : 'Add feed'} *${esc(params.label || '?')}*\n` +
+             `URL: \`${esc(params.url || '?')}\`\n` +
+             `${pl ? 'Kategoria' : 'Category'}: *${esc(params.category || 'general')}*`;
     case 'briefing_on':
       return pl ? 'Włącz codzienne raporty briefing' : 'Enable daily briefing reports';
     case 'briefing_off':
       return pl ? 'Wyłącz codzienne raporty briefing' : 'Disable daily briefing reports';
     case 'briefing_time_morning':
       return (pl ? 'Ustaw poranny raport na' : 'Set morning briefing to') +
-             ` *${params.time || '?'}*` +
+             ` *${esc(params.time || '?')}*` +
              (params.enable ? (pl ? ' i włącz' : ' and enable') : '');
     case 'briefing_time_evening':
       return (pl ? 'Ustaw wieczorny raport na' : 'Set evening briefing to') +
-             ` *${params.time || '?'}*` +
+             ` *${esc(params.time || '?')}*` +
              (params.enable ? (pl ? ' i włącz' : ' and enable') : '');
     case 'briefing_keywords_add':
       return (pl ? 'Dodaj filtr słów kluczowych:' : 'Add keyword filter:') +
-             ` *${params.keyword || '?'}*`;
+             ` *${esc(params.keyword || '?')}*`;
     case 'briefing_keywords_remove':
       return (pl ? 'Usuń filtr:' : 'Remove filter:') +
-             ` *${params.keyword || '?'}*`;
+             ` *${esc(params.keyword || '?')}*`;
     case 'briefing_run_now': {
       const t = params.type === 'evening'
         ? (pl ? 'wieczorny' : 'evening') : (pl ? 'poranny' : 'morning');
@@ -61,17 +66,19 @@ function formatConfirmation(type, lang, params) {
     }
     case 'schedule_add':
       return (pl ? 'Zaplanuj wyszukiwanie codziennie o' : 'Schedule daily search at') +
-             ` *${params.time || '?'}*\n` +
-             (pl ? 'Zapytanie:' : 'Query:') + ` _${params.query || '?'}_`;
+             ` *${esc(params.time || '?')}*\n` +
+             (pl ? 'Zapytanie:' : 'Query:') + ` _${esc(params.query || '?')}_`;
+    case 'schedule_list':
+      return pl ? 'Pokaż listę zaplanowanych wyszukiwań' : 'List scheduled searches';
     case 'remind':
       return (pl ? 'Ustaw przypomnienie' : 'Set reminder') +
-             ` *${params.when || '?'}*\n` +
-             (pl ? 'Treść:' : 'Text:') + ` _${params.text || '?'}_`;
+             ` *${esc(params.when || '?')}*\n` +
+             (pl ? 'Treść:' : 'Text:') + ` _${esc(params.text || '?')}_`;
     case 'remember':
       return (pl ? 'Zapamiętaj fakt:' : 'Remember fact:') +
-             ` _${params.fact || '?'}_`;
+             ` _${esc(params.fact || '?')}_`;
     default:
-      return type;
+      return esc(type);
   }
 }
 
@@ -754,6 +761,23 @@ async function executeIntent(bot, msg, intent) {
       return true;
     }
 
+    case 'schedule_list': {
+      const schedules = db.getSchedules(userId);
+      if (!schedules.length) {
+        await bot.sendMessage(chatId,
+          t(lang, '_No scheduled searches._\nAdd one: `/schedule add HH:MM [query]`',
+                  '_Brak zaplanowanych wyszukiwań._\nDodaj: `/schedule add GG:MM [zapytanie]`'),
+          { parse_mode: 'Markdown' });
+        return true;
+      }
+      const lines = [`*🔍 ${t(lang, 'Scheduled searches', 'Zaplanowane wyszukiwania')} (${schedules.length}):*`, ''];
+      schedules.forEach((s, i) => {
+        lines.push(`${i + 1}. 🕐 *${s.time}* — _${s.query}_`);
+      });
+      await bot.sendMessage(chatId, lines.join('\n'), { parse_mode: 'Markdown' });
+      return true;
+    }
+
     case 'schedule_add': {
       const { time, query } = params;
       if (!time || !query || !/^\d{1,2}:\d{2}$/.test(time)) {
@@ -832,7 +856,7 @@ async function handleMessage(bot, msg) {
     const { intent: type, lang, params } = intent;
 
     // Read-only intents execute immediately — no confirmation needed
-    if (type === 'briefing_list_feeds') {
+    if (type === 'briefing_list_feeds' || type === 'schedule_list') {
       const handled = await executeIntent(bot, msg, intent);
       if (handled) return;
     } else {

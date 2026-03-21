@@ -38,6 +38,7 @@ Supported intents:
 - briefing_list_feeds    → list all configured RSS feeds
 - briefing_run_now      → trigger morning or evening briefing immediately
 - schedule_add           → add a daily recurring web search at a specific time
+- schedule_list          → list all configured scheduled searches
 - remind                 → set a one-time reminder
 - remember               → save a persistent fact about the user
 - none                   → regular conversation, question, or unrecognized request
@@ -57,6 +58,7 @@ Params per intent:
 - briefing_list_feeds:    {}
 - briefing_run_now:      {"type": "morning|evening"}  — "morning" if user says morning/poranny/rano, "evening" if evening/wieczorny/wieczorem, default "morning"
 - schedule_add:           {"time": "HH:MM", "query": "search query string"}
+- schedule_list:          {}
 - remind:                 {"when": "30min|2h|45s|HH:MM", "text": "reminder message"}
 - remember:               {"fact": "fact about the user in third person, Polish"}
 - none:                   {}
@@ -237,7 +239,7 @@ function parseResponse(raw) {
       'briefing_time_morning', 'briefing_time_evening',
       'briefing_keywords_add', 'briefing_keywords_remove',
       'briefing_list_feeds', 'briefing_run_now',
-      'schedule_add', 'remind', 'remember',
+      'schedule_add', 'schedule_list', 'remind', 'remember',
     ]);
     if (!KNOWN.has(obj.intent)) return null;
     return { intent: obj.intent, lang: obj.lang === 'en' ? 'en' : 'pl', params: obj.params || {} };
