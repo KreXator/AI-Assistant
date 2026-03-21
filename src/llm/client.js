@@ -75,37 +75,36 @@ function resolveDisplayModel(localModel) {
 // ─── OpenRouter cascade ───────────────────────────────────────────────────────
 
 /**
- * Returns the list of local tier models to try in order, starting from `model`.
- * Small escalates through Medium → Large; Medium → Large; Large stays solo.
- */
-function buildOrCascade(model) {
-  if (model === MODEL_SMALL)  return [MODEL_SMALL,  MODEL_MEDIUM, MODEL_LARGE];
-  if (model === MODEL_MEDIUM) return [MODEL_MEDIUM, MODEL_LARGE];
-  return [model]; // LARGE or any explicit OR model ID — no escalation
-}
-
-/**
- * Try OpenRouter with automatic tier escalation on 429.
- * Small → Medium → Large before giving up and letting Ollama take over.
+ * Try OpenRouter with automatic paid fallback on 429.
+ *
+ * Flow:
+ *   1. openrouter/free (or explicit model if user selected one)
+ *      → OR picks the best available free model internally
+ *   2. OR_MODEL_PREMIUM (google/gemini-2.5-flash-lite)
+ *      → cheap paid model, no upstream rate limits
+ *
+ * Throws on non-429 errors or when paid fallback also fails.
+ * Caller (chat()) catches and routes to Ollama.
  */
 async function tryOpenRouterWithCascade(model, messages) {
-  const candidates = buildOrCascade(model);
-  let lastErr;
-  for (const m of candidates) {
-    try {
-      const reply = await openrouter.complete(m, messages);
-      console.log(`[client] provider=openrouter model=${openrouter.mapModel(m)}`);
-      return reply;
-    } catch (err) {
-      if (err.response?.status === 429) {
-        console.warn(`[client] OR ${openrouter.mapModel(m)} rate-limited (429), trying next tier…`);
-        lastErr = err;
-        continue;
-      }
-      throw err; // non-429 error → surface immediately (triggers Ollama fallback)
-    }
+  const isDefaultTier = [MODEL_SMALL, MODEL_MEDIUM, MODEL_LARGE].includes(model);
+  const primary = isDefaultTier ? 'openrouter/free' : model;
+  const paid    = openrouter.OR_MODEL_PREMIUM;
+
+  // Step 1: primary (free router or user-selected model)
+  try {
+    const reply = await openrouter.complete(primary, messages);
+    console.log(`[client] provider=openrouter model=${primary}`);
+    return reply;
+  } catch (err) {
+    if (err.response?.status !== 429 || primary === paid) throw err;
+    console.warn(`[client] OR free router rate-limited (429), trying paid fallback…`);
   }
-  throw lastErr; // all OR tiers exhausted → caller falls back to Ollama
+
+  // Step 2: paid fallback
+  const reply = await openrouter.complete(paid, messages);
+  console.log(`[client] provider=openrouter model=${paid} (paid fallback)`);
+  return reply;
 }
 
 // ─── Main chat call ───────────────────────────────────────────────────────────
@@ -139,10 +138,16 @@ async function chat({ userId, userMessage, model, persona = 'default', customIns
     ...history.map(m => ({ role: m.role, content: m.content })),
   ];
 
-  // 3. Call provider (OR primary with tier cascade, Ollama fallback)
+  // 3. Call provider: OR (free → paid) → Ollama
   let reply;
   if (process.env.OPENROUTER_API_KEY) {
-    reply = await tryOpenRouterWithCascade(model, messages);
+    try {
+      reply = await tryOpenRouterWithCascade(model, messages);
+    } catch (err) {
+      console.warn(`[client] OR failed (${err.response?.status || err.message}), falling back to Ollama`);
+      reply = await ollama.completeRaw(model, messages);
+      console.log('[client] provider=ollama (fallback)');
+    }
   } else {
     reply = await ollama.completeRaw(model, messages);
     console.log('[client] provider=ollama');
@@ -162,13 +167,11 @@ async function listModels() {
   if (process.env.OPENROUTER_API_KEY) {
     const orAlive = await openrouter.isReachable();
     lines.push(`*OpenRouter* (${orAlive ? 'online — primary' : 'offline'})`);
-    lines.push(`  Small  : \`${openrouter.OR_MODEL_SMALL}\``);
-    lines.push(`  Medium : \`${openrouter.OR_MODEL_MEDIUM}\``);
-    lines.push(`  Large  : \`${openrouter.OR_MODEL_LARGE}\``);
+    lines.push(`  Free   : \`openrouter/free\` ← OR picks best available`);
+    lines.push(`  Paid   : \`${openrouter.OR_MODEL_PREMIUM}\` ← auto fallback + /model premium`);
     lines.push(`  Vision : \`${openrouter.OR_VISION_MODEL}\``);
-    lines.push(`  Premium: \`${openrouter.OR_MODEL_PREMIUM}\` ← /model premium`);
     lines.push('');
-    lines.push(`*Ollama* (fallback)`);
+    lines.push(`*Ollama* (last resort fallback)`);
   } else {
     lines.push(`*Ollama* (primary — no OPENROUTER\\_API\\_KEY set)`);
   }
