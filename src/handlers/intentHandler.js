@@ -35,7 +35,7 @@ const TRIGGER_RE = new RegExp([
   'remember\\s+that',
   'note\\s+that',
 
-  // Briefing feeds
+  // Briefing feeds — add/remove/list
   'dodaj\\s+feed',
   'dodaj\\s+rss',
   'add\\s+feed',
@@ -44,6 +44,13 @@ const TRIGGER_RE = new RegExp([
   'usuń\\s+feed',
   'remove\\s+feed',
   'delete\\s+feed',
+  'moje\\s+feedy',
+  'lista\\s+feed',
+  'pokaż\\s+feedy',
+  'jakie\\s+mam\\s+feed',
+  'podaj\\s+feedy',
+  'show\\s+(my\\s+)?feeds',
+  'list\\s+(my\\s+)?feeds',
 
   // Briefing on/off
   'włącz\\s+(raporty|briefing|poranne|wieczorne|poranny|wieczorny)',
@@ -99,6 +106,7 @@ Supported intents:
 - briefing_time_evening  → set evening briefing time
 - briefing_keywords_add  → add keyword filter for job offers
 - briefing_keywords_remove → remove keyword filter
+- briefing_list_feeds    → list all configured RSS feeds
 - schedule_add           → add a daily recurring web search at a specific time
 - remind                 → set a one-time reminder
 - remember               → save a persistent fact about the user
@@ -116,6 +124,7 @@ Params per intent:
 - briefing_time_evening:  {"time": "HH:MM", "enable": true|false}
 - briefing_keywords_add:  {"keyword": "exact phrase in lowercase"}
 - briefing_keywords_remove: {"keyword": "exact phrase in lowercase"}
+- briefing_list_feeds:    {}
 - schedule_add:           {"time": "HH:MM", "query": "search query string"}
 - remind:                 {"when": "30min|2h|45s|HH:MM", "text": "reminder message"}
 - remember:               {"fact": "fact about the user in third person, Polish"}
@@ -132,9 +141,12 @@ Time normalization rules:
 - Always zero-pad hours: "7:30" → "07:30"
 
 Category detection rules (briefing_add_feed):
-- "jobs", "praca", "oferty", "oferty pracy", "rekrutacja" → "jobs"
-- "news", "wiadomości", "aktualności" → "news"
-- "tech", "technologia", "programowanie" → "tech"
+- Explicit text: "jobs", "praca", "oferty", "oferty pracy", "rekrutacja" → "jobs"
+- Explicit text: "news", "wiadomości", "aktualności" → "news"
+- Explicit text: "tech", "technologia", "programowanie" → "tech"
+- URL heuristic: if URL contains "job", "jobs", "praca", "career", "work", "rekrut", "hiring" → "jobs"
+- URL heuristic: if URL contains "news", "wiadomosc", "aktualnosc" → "news"
+- URL heuristic: if URL contains "tech", "dev", "programming", "software" → "tech"
 - default → "general"
 
 CRITICAL disambiguation — use "none" for these:
@@ -186,6 +198,24 @@ Examples:
 
 "usuń filtr remote"
 → {"intent":"briefing_keywords_remove","lang":"pl","params":{"keyword":"remote"}}
+
+"podaj moje feedy rss"
+→ {"intent":"briefing_list_feeds","lang":"pl","params":{}}
+
+"jakie mam feedy?"
+→ {"intent":"briefing_list_feeds","lang":"pl","params":{}}
+
+"moje feedy rss"
+→ {"intent":"briefing_list_feeds","lang":"pl","params":{}}
+
+"pokaż feedy"
+→ {"intent":"briefing_list_feeds","lang":"pl","params":{}}
+
+"list my feeds"
+→ {"intent":"briefing_list_feeds","lang":"en","params":{}}
+
+"show my rss feeds"
+→ {"intent":"briefing_list_feeds","lang":"en","params":{}}
 
 "remove keyword filter senior"
 → {"intent":"briefing_keywords_remove","lang":"en","params":{"keyword":"senior"}}
@@ -260,6 +290,7 @@ function parseResponse(raw) {
       'briefing_add_feed', 'briefing_on', 'briefing_off',
       'briefing_time_morning', 'briefing_time_evening',
       'briefing_keywords_add', 'briefing_keywords_remove',
+      'briefing_list_feeds',
       'schedule_add', 'remind', 'remember',
     ]);
     if (!KNOWN.has(obj.intent)) return null;

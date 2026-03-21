@@ -666,6 +666,25 @@ async function executeIntent(bot, msg, intent) {
       return true;
     }
 
+    case 'briefing_list_feeds': {
+      const feeds = db.getBriefingFeeds(userId);
+      if (!feeds.length) {
+        await bot.sendMessage(chatId,
+          t(lang,
+            '_No feeds configured._\nAdd one: `/briefing add <url> <label>`',
+            '_Brak skonfigurowanych feedów._\nDodaj: `/briefing add <url> <label>`'),
+          { parse_mode: 'Markdown' });
+        return true;
+      }
+      const lines = [`*📰 ${t(lang, 'Your RSS feeds', 'Twoje feedy RSS')} (${feeds.length}):*`, ''];
+      for (const f of feeds) {
+        lines.push(`• *${f.label}* _${f.category}_`);
+        lines.push(`  ${f.url}`);
+      }
+      await bot.sendMessage(chatId, lines.join('\n'), { parse_mode: 'Markdown' });
+      return true;
+    }
+
     case 'schedule_add': {
       const { time, query } = params;
       if (!time || !query || !/^\d{1,2}:\d{2}$/.test(time)) {
