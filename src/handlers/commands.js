@@ -947,7 +947,8 @@ async function handleMessage(bot, msg) {
   // Decide: web search needed?
   const needsSearch =
     // Imperative verbs at start of message — user wants a lookup
-    /^(sprawdź|podaj|pokaż|wyszukaj|znajdź|szukaj|poszukaj|check|find|search|look up|show me|tell me|what is|what are|who is)\b/i.test(text) ||
+    // Note: \b fails after Polish diacritics, so use (?=\s|$) instead
+    /^(sprawdź|podaj|pokaż|wyszukaj|znajdź|szukaj|poszukaj|check|find|search|look up|show me|tell me|what is|what are|who is)(?=\s|$)/i.test(text) ||
     // Explicit search anywhere in message
     /\b(search|wyszukaj|google|find|znajdź)\b.+/i.test(text) ||
     // "what is X" — factual lookup
