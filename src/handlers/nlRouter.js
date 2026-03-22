@@ -234,9 +234,9 @@ function precheck(text) {
     return { type: 'bot_command', intent: 'daily_digest', lang: 'pl', params: {} };
   }
 
-  // Navigation queries → web_search (LLM doesn't know local streets)
+  // Navigation queries → web_search with subtype flag (LLM hallucinates local streets)
   if (NAV_SEARCH_RE.test(text)) {
-    return { type: 'web_search', intent: null, lang: 'pl', params: {} };
+    return { type: 'web_search', intent: null, lang: 'pl', params: { subtype: 'navigation' } };
   }
 
   // schedule_add: "zaplanuj ... o HH:MM" — extract time and use rest as query

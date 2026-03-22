@@ -1197,8 +1197,19 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
     // Strip **double asterisks** — they render incorrectly in Telegram Markdown V1
     const results = rawResults.replace(/\*\*/g, '');
     const lang    = routeResult.lang === 'en' ? 'English' : 'Polish';
-    // Explicit instruction: do NOT echo/list the results, just answer directly
-    enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\nWrite a direct ${lang} answer to: "${text}". Do not output any header like "Context from web search:" — start your answer immediately.`;
+
+    if (routeResult.params?.subtype === 'navigation') {
+      // Navigation: LLM must only use search results — never invent street names
+      enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\n` +
+        `Write a direct ${lang} answer to: "${text}".\n` +
+        `CRITICAL: Use ONLY information from the search results above. ` +
+        `If the results do not contain specific local route or street data for the requested location, ` +
+        `say you cannot provide a reliable route and recommend Komoot (komoot.com) or Google Maps instead. ` +
+        `Do NOT invent street names, park names, or routes. Start your answer immediately.`;
+    } else {
+      // Explicit instruction: do NOT echo/list the results, just answer directly
+      enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\nWrite a direct ${lang} answer to: "${text}". Do not output any header like "Context from web search:" — start your answer immediately.`;
+    }
   }
 
   const manualModel  = cfg.manualModel ? cfg.model : null;
@@ -1249,7 +1260,7 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
     clearInterval(typingTimer);
     await bot.deleteMessage(chatId, streamMsg.message_id).catch(() => {});
     // Strip stray CJK characters occasionally injected by some LLMs (e.g. Mistral-small)
-    const clean    = reply.replace(/[\u3000-\u9fff\uff00-\uffef\u3040-\u30ff]/g, '');
+    const clean    = reply.replace(/[\u3000-\u9fff\uff00-\uffef\u3040-\u30ff]/g, '').replace(/\s{2,}/g, ' ').trim();
     const prefixed = model !== router.MODEL_SMALL ? `${label}\n\n${clean}` : clean;
     await sendLong(bot, chatId, prefixed);
   } catch (err) {
