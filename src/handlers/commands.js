@@ -1014,9 +1014,12 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
       }
     }
     await bot.sendMessage(chatId, '🔍 Searching the web first...');
-    const results = await search.webSearch(text);
+    const rawResults = await search.webSearch(text);
+    // Strip **double asterisks** — they render incorrectly in Telegram Markdown V1
+    const results = rawResults.replace(/\*\*/g, '');
     const lang    = routeResult.lang === 'en' ? 'English' : 'Polish';
-    enriched = `Search results:\n${results}\n\nAnswer in ${lang}: ${text}`;
+    // Explicit instruction: do NOT echo/list the results, just answer directly
+    enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\nWrite a direct ${lang} answer to: "${text}". Do not output any header like "Context from web search:" — start your answer immediately.`;
   }
 
   const manualModel  = cfg.manualModel ? cfg.model : null;
