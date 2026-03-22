@@ -943,7 +943,7 @@ function extractWeatherCity(text) {
   return m[1];
 }
 
-async function showConfirmation(bot, msg, intent) {
+async function showConfirmation(bot, msg, intent, originalText = '') {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
   const { intent: type, lang, params } = intent;
@@ -964,10 +964,10 @@ async function showConfirmation(bot, msg, intent) {
     clearTimeout(pendingIntents.get(String(userId)).timer);
   }
   const timer = setTimeout(() => pendingIntents.delete(String(userId)), CONFIRMATION_TTL);
-  pendingIntents.set(String(userId), { intent, chatId, msgId: sent.message_id, timer });
+  pendingIntents.set(String(userId), { intent, chatId, msgId: sent.message_id, timer, text: originalText });
 }
 
-async function handleMessage(bot, msg) {
+async function handleMessage(bot, msg, { forceChat = false } = {}) {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
   const text   = msg.text?.trim();
@@ -978,14 +978,16 @@ async function handleMessage(bot, msg) {
   if (cfg.chatId !== chatId) await db.setConfig(userId, { chatId });
 
   // Unified NL router — single LLM call for all routing decisions
-  const routeResult = await nlRouter.route(text);
+  const routeResult = forceChat
+    ? { type: 'chat', intent: null, lang: 'pl', params: {} }
+    : await nlRouter.route(text);
 
   if (routeResult.type === 'bot_command') {
     const intent = { intent: routeResult.intent, lang: routeResult.lang, params: routeResult.params };
     if (READ_ONLY_INTENTS.has(routeResult.intent)) {
       await executeIntent(bot, msg, intent);
     } else {
-      await showConfirmation(bot, msg, intent);
+      await showConfirmation(bot, msg, intent, text);
     }
     return;
   }
@@ -1013,7 +1015,7 @@ async function handleMessage(bot, msg) {
     }
     await bot.sendMessage(chatId, '🔍 Searching the web first...');
     const results = await search.webSearch(text);
-    enriched = `User asked: ${text}\n\nContext from web search:\n${results}`;
+    enriched = `Search results:\n${results}\n\nQuestion: ${text}`;
   }
 
   const manualModel  = cfg.manualModel ? cfg.model : null;
@@ -1182,10 +1184,16 @@ function register(bot) {
         const fakeMsg = { chat: { id: pending.chatId }, from: { id: Number(userId) } };
         await executeIntent(bot, fakeMsg, pending.intent);
       } else {
-        await bot.sendMessage(pending.chatId,
-          '_Anulowano. Potraktuję to jako zwykłe pytanie._',
-          { parse_mode: 'Markdown' }
-        );
+        // Re-route the original message as plain chat (skip bot_command classification)
+        if (pending.text) {
+          const fakeMsg = { chat: { id: pending.chatId }, from: { id: Number(userId) }, text: pending.text };
+          await handleMessage(bot, fakeMsg, { forceChat: true });
+        } else {
+          await bot.sendMessage(pending.chatId,
+            '_Anulowano._',
+            { parse_mode: 'Markdown' }
+          );
+        }
       }
     } catch (err) {
       console.error('[callback_query] executeIntent error:', err.message);

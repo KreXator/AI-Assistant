@@ -186,7 +186,8 @@ const LIST_PRECHECK = [
 ];
 
 // "zaplanuj X" where X is NOT a scheduled-search — force to chat
-const CHAT_OVERRIDE = /\bzaplanuj\s+(trasę|wyjazd|dzień|projekt|menu|wakacje|podróż|weekend|wycieczkę|aktywność|czas|tydzień)\b/i;
+// .{0,15} allows words like "mi", "sobie", "nam" between "zaplanuj" and the noun
+const CHAT_OVERRIDE = /\bzaplanuj\b.{0,15}\b(trasę|wyjazd|dzień|projekt|menu|wakacje|podróż|weekend|wycieczkę|aktywność|czas|tydzień)\b/i;
 
 function precheck(text) {
   if (CHAT_OVERRIDE.test(text)) return { type: 'chat', intent: null, lang: 'pl', params: {} };
