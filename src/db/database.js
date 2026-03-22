@@ -527,6 +527,14 @@ async function removeBriefingKeyword(userId, keyword) {
 
 // ─── Exports ─────────────────────────────────────────────────────────────────
 
+/** Returns [{userId, chatId}] for every user that has a stored chatId. */
+async function getAllChatIds() {
+  const r = await turso.execute(
+    'SELECT user_id, chat_id FROM config WHERE chat_id IS NOT NULL'
+  );
+  return r.rows.map(row => ({ userId: Number(row[0]), chatId: Number(row[1]) }));
+}
+
 module.exports = {
   init,
   // history
@@ -538,7 +546,7 @@ module.exports = {
   // todos
   getTodos, addTodo, doneTodo, clearTodos,
   // config
-  getConfig, setConfig,
+  getConfig, setConfig, getAllChatIds,
   // schedules
   getSchedules, addSchedule, removeSchedule, getAllSchedules,
   // reminders

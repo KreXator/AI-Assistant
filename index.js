@@ -24,6 +24,19 @@ if (!TOKEN) {
   process.exit(1);
 }
 
+async function notifyReady(bot) {
+  try {
+    const users = await db.getAllChatIds();
+    const ver   = require('./package.json').version || '';
+    const label = ver ? ` v${ver}` : '';
+    for (const { chatId } of users) {
+      await bot.sendMessage(chatId, `✅ Bot${label} gotowy do działania.`).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[notify] startup notification failed:', err.message);
+  }
+}
+
 async function startBot(bot) {
   commands.register(bot);
   await scheduler.init(bot);
@@ -81,11 +94,13 @@ async function main() {
       await bot.startPolling({ params: { allowed_updates: ['message', 'callback_query'] } });
       await startBot(bot);
       console.log('🤖 Took over as primary. Bot is now active.');
+      await notifyReady(bot);
     });
   } else {
     lock.startHeartbeat(instanceId);
     await bot.startPolling({ params: { allowed_updates: ['message', 'callback_query'] } });
     await startBot(bot);
+    await notifyReady(bot);
   }
 
   // Graceful shutdown
