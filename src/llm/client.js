@@ -21,14 +21,21 @@ const MODEL_MEDIUM = process.env.MODEL_MEDIUM || 'qwen2.5:7b-instruct-q4_K_M';
 const MODEL_LARGE  = process.env.MODEL_LARGE  || 'qwen3:8b';
 
 // History limits:
-//   HISTORY_CHARS  — primary limit: total character budget across all messages.
-//                    1 token ≈ 4 chars; 200 000 chars ≈ 50 000 tokens.
-//                    Safe for any 131K-context model (Gemma 27B etc.) with room for
-//                    system prompt, memory block, and response.
+//   HISTORY_CHARS  — character budget across all messages (1 token ≈ 4 chars).
+//                    40 000 chars ≈ 10 000 tokens — ~25-30 conversation turns.
+//                    Enough for any practical context; keeps input cost low.
+//                    Override via env var if you need longer memory.
 //   HISTORY_WINDOW — secondary cap: max number of messages regardless of chars.
-//                    Prevents pathological cases (e.g. 5000 one-liner messages).
-const HISTORY_CHARS  = parseInt(process.env.HISTORY_CHARS  || '200000', 10);
-const HISTORY_WINDOW = parseInt(process.env.HISTORY_WINDOW || '100',    10);
+const HISTORY_CHARS  = parseInt(process.env.HISTORY_CHARS  || '40000', 10);
+const HISTORY_WINDOW = parseInt(process.env.HISTORY_WINDOW || '50',    10);
+
+// Output token caps per model tier — prevents runaway verbose responses.
+// Enforces length constraints at the API level (not just via system prompt).
+const MAX_TOKENS = {
+  [MODEL_SMALL]:  500,   // simple tasks, short answers
+  [MODEL_MEDIUM]: 600,   // daily driver — concise by default
+  [MODEL_LARGE]:  1000,  // complex tasks, code
+};
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -86,19 +93,20 @@ function resolveDisplayModel(localModel) {
  * Caller (chat()) catches and routes to Ollama.
  */
 async function tryOpenRouterWithCascade(model, messages) {
-  const primary = openrouter.mapModel(model);
-  const paid    = openrouter.OR_MODEL_PREMIUM;
+  const primary   = openrouter.mapModel(model);
+  const paid      = openrouter.OR_MODEL_PREMIUM;
+  const maxTokens = MAX_TOKENS[model] || 1200; // premium/coder/explicit OR model ID
 
   // Paid models: call directly, no cascade needed
   if (!primary.endsWith(':free')) {
-    const reply = await openrouter.complete(primary, messages);
+    const reply = await openrouter.complete(primary, messages, maxTokens);
     console.log(`[client] provider=openrouter model=${primary}`);
     return reply;
   }
 
   // Free models: cascade to premium on 429
   try {
-    const reply = await openrouter.complete(primary, messages);
+    const reply = await openrouter.complete(primary, messages, maxTokens);
     console.log(`[client] provider=openrouter model=${primary}`);
     return reply;
   } catch (err) {
@@ -106,7 +114,7 @@ async function tryOpenRouterWithCascade(model, messages) {
     console.warn(`[client] OR free model rate-limited (429), falling back to premium…`);
   }
 
-  const reply = await openrouter.complete(paid, messages);
+  const reply = await openrouter.complete(paid, messages, maxTokens);
   console.log(`[client] provider=openrouter model=${paid} (premium fallback)`);
   return reply;
 }

@@ -124,7 +124,7 @@ async function callLLM(text) {
     { role: 'user',   content: text },
   ];
   try {
-    return await openrouter.complete(openrouter.OR_MODEL_SMALL, messages);
+    return await openrouter.complete(openrouter.OR_MODEL_SMALL, messages, 150);
   } catch {
     try {
       return await ollama.completeRaw(process.env.MODEL_SMALL || 'qwen2.5:3b-instruct-q4_K_M', messages);

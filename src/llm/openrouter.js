@@ -90,21 +90,22 @@ function needsSystemWorkaround(orModel) {
  * Send a messages array to OpenRouter and return the assistant reply text.
  * @param {string} localModel  — local tier name (mapped internally to OR model)
  * @param {Array<{role, content}>} messages
+ * @param {number} [maxTokens] — optional output token cap (prevents runaway responses)
  * @returns {Promise<string>}
  */
-async function complete(localModel, messages) {
+async function complete(localModel, messages, maxTokens) {
   if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not set');
 
   const orModel    = mapModel(localModel);
   const normalized = needsSystemWorkaround(orModel) ? injectSystemAsUser(messages) : messages;
-  console.log(`[openrouter] calling model=${orModel}, messages=${normalized.length}`);
+  console.log(`[openrouter] calling model=${orModel}, messages=${normalized.length}, max_tokens=${maxTokens || 'unlimited'}`);
+
+  const body = { model: orModel, messages: normalized };
+  if (maxTokens) body.max_tokens = maxTokens;
 
   let res;
   try {
-    res = await axios.post(`${BASE_URL}/chat/completions`, {
-      model:    orModel,
-      messages: normalized,
-    }, {
+    res = await axios.post(`${BASE_URL}/chat/completions`, body, {
       timeout: 180_000,
       headers: orHeaders(),
     });

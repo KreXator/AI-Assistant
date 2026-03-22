@@ -20,7 +20,7 @@ try {
 
 // ─── Serper (Google) ─────────────────────────────────────────────────────────
 
-async function serperSearch(query, maxResults = 5) {
+async function serperSearch(query, maxResults = 3) {
   const res = await axios.post(
     'https://google.serper.dev/search',
     { q: query, num: maxResults },
@@ -37,7 +37,10 @@ async function serperSearch(query, maxResults = 5) {
   if (!hits.length) return `[No results found for: "${query}"]`;
 
   const formatted = hits
-    .map((r, i) => `**${i + 1}. ${r.title}**\n${r.link}\n${r.snippet || ''}`)
+    .map((r, i) => {
+      const snippet = (r.snippet || '').slice(0, 150);
+      return `**${i + 1}. ${r.title}**\n${r.link}\n${snippet}`;
+    })
     .join('\n\n');
 
   return `🔍 Google results for "${query}":\n\n${formatted}`;
@@ -45,7 +48,7 @@ async function serperSearch(query, maxResults = 5) {
 
 // ─── DuckDuckGo scrape fallback ───────────────────────────────────────────────
 
-async function ddgSearch(query, maxResults = 5) {
+async function ddgSearch(query, maxResults = 3) {
   if (!ddg) return '[Web search unavailable — install duck-duck-scrape or set SERPER_API_KEY]';
 
   const results = await ddg.search(query, { safeSearch: ddg.SafeSearchType.MODERATE });
@@ -53,7 +56,10 @@ async function ddgSearch(query, maxResults = 5) {
   if (!hits.length) return `[No results found for: "${query}"]`;
 
   const formatted = hits
-    .map((r, i) => `**${i + 1}. ${r.title}**\n${r.url}\n${r.description || ''}`)
+    .map((r, i) => {
+      const desc = (r.description || '').slice(0, 150);
+      return `**${i + 1}. ${r.title}**\n${r.url}\n${desc}`;
+    })
     .join('\n\n');
 
   return `🔍 DuckDuckGo results for "${query}":\n\n${formatted}`;
@@ -68,7 +74,7 @@ async function ddgSearch(query, maxResults = 5) {
  * @param {number} maxResults
  * @returns {Promise<string>}
  */
-async function webSearch(query, maxResults = 5) {
+async function webSearch(query, maxResults = 3) {
   try {
     if (process.env.SERPER_API_KEY) {
       return await serperSearch(query, maxResults);
