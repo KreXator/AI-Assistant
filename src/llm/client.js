@@ -78,8 +78,9 @@ function resolveDisplayModel(localModel) {
  * Try OpenRouter with automatic paid fallback on 429.
  *
  * Flow:
- *   1. openrouter/free (or explicit model if user selected one)
- *      → OR picks the best available free model internally
+ *   1. OR_MODEL_SMALL/MEDIUM/LARGE (google/gemma-3-*:free by default)
+ *      → specific free model, predictable quality and Polish support
+ *      → on 429 (rate-limited) falls through to step 2
  *   2. OR_MODEL_PREMIUM (google/gemini-2.5-flash-lite)
  *      → cheap paid model, no upstream rate limits
  *
@@ -87,18 +88,18 @@ function resolveDisplayModel(localModel) {
  * Caller (chat()) catches and routes to Ollama.
  */
 async function tryOpenRouterWithCascade(model, messages) {
-  const isDefaultTier = [MODEL_SMALL, MODEL_MEDIUM, MODEL_LARGE].includes(model);
-  const primary = isDefaultTier ? 'openrouter/free' : model;
+  // Map local tier name (e.g. qwen2.5:7b) → configured OR model (e.g. google/gemma-3-12b-it:free)
+  const primary = openrouter.mapModel(model);
   const paid    = openrouter.OR_MODEL_PREMIUM;
 
-  // Step 1: primary (free router or user-selected model)
+  // Step 1: primary (configured free model or user-selected model)
   try {
     const reply = await openrouter.complete(primary, messages);
     console.log(`[client] provider=openrouter model=${primary}`);
     return reply;
   } catch (err) {
     if (err.response?.status !== 429 || primary === paid) throw err;
-    console.warn(`[client] OR free router rate-limited (429), trying paid fallback…`);
+    console.warn(`[client] OR free model rate-limited (429), trying paid fallback…`);
   }
 
   // Step 2: paid fallback
