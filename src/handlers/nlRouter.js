@@ -191,7 +191,7 @@ const CHAT_OVERRIDE = /\bzaplanuj\b.{0,15}\b(trasę|wyjazd|dzień|projekt|menu|w
 
 // "zaplanuj [coś] o HH:MM" — deterministic schedule_add detection
 // Matches: "zaplanuj wyszukiwanie o 9:00 ...", "zaplanuj codzienny przegląd o 8:30 ..."
-const SCHEDULE_ADD_RE = /\bzaplanuj\b.{0,40}\bo\s+(\d{1,2}:\d{2})\b/i;
+const SCHEDULE_ADD_RE = /\bzaplanuj\b.{0,100}\bo\s+(\d{1,2}:\d{2})\b/i;
 
 function precheck(text) {
   if (CHAT_OVERRIDE.test(text)) return { type: 'chat', intent: null, lang: 'pl', params: {} };
