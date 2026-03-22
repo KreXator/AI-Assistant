@@ -601,6 +601,58 @@ async function handleReminderDel(bot, msg, args) {
   await bot.sendMessage(chatId, `🗑 Reminder #${n} cancelled: _${text}_`, { parse_mode: 'Markdown' });
 }
 
+// ─── Export ──────────────────────────────────────────────────────────────────
+
+async function handleExport(bot, msg) {
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  await bot.sendChatAction(chatId, 'upload_document');
+
+  const [notes, todos, memory, schedules, feeds, reminders] = await Promise.all([
+    db.getNotes(userId),
+    db.getTodos(userId),
+    db.getMemory(userId),
+    db.getSchedules(userId),
+    db.getBriefingFeeds(userId),
+    db.loadReminders(),
+  ]);
+  const myReminders = reminders.filter(r => r.userId === userId);
+
+  const now   = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  const lines = [`AI Assistant — Data Export`, `Generated: ${now}`, `${'─'.repeat(50)}`];
+
+  lines.push('', '## MEMORY', memory.length ? memory.map(m => `- ${m.fact}`).join('\n') : '(empty)');
+
+  lines.push('', '## NOTES');
+  lines.push(notes.length
+    ? notes.map((n, i) => `[${i + 1}] ${n.note}${n.ts ? '  (' + n.ts.slice(0, 10) + ')' : ''}`).join('\n')
+    : '(empty)');
+
+  lines.push('', '## TODOS');
+  lines.push(todos.length
+    ? todos.map((t, i) => `[${i + 1}] [${t.done ? 'x' : ' '}] ${t.task}`).join('\n')
+    : '(empty)');
+
+  lines.push('', '## REMINDERS (pending)');
+  lines.push(myReminders.length
+    ? myReminders.map(r => `- ${r.fireAt.slice(0, 16).replace('T', ' ')} — ${r.text}`).join('\n')
+    : '(empty)');
+
+  lines.push('', '## SCHEDULED SEARCHES');
+  lines.push(schedules.length
+    ? schedules.map(s => `- ${s.time} — ${s.query}`).join('\n')
+    : '(empty)');
+
+  lines.push('', '## RSS FEEDS');
+  lines.push(feeds.length
+    ? feeds.map(f => `- [${f.category}] ${f.label}: ${f.url}`).join('\n')
+    : '(empty)');
+
+  const content = Buffer.from(lines.join('\n'), 'utf-8');
+  const filename = `klawik-export-${now.slice(0, 10)}.txt`;
+  await bot.sendDocument(chatId, content, {}, { filename, contentType: 'text/plain' });
+}
+
 // ─── Weather ─────────────────────────────────────────────────────────────────
 
 async function handleWeather(bot, msg, args) {
@@ -1089,17 +1141,23 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
 
   // ── Streaming chat with timer-based Telegram edits ───────────────────────
   // onChunk is purely synchronous (just updates a variable).
-  // A setInterval fires every 800ms and edits the placeholder independently.
-  // This avoids concurrent async calls and Telegram rate-limit issues.
+  // Two timers run in parallel:
+  //   editTimer   — edits the message every 400ms with accumulated tokens
+  //   typingTimer — sends "typing" action every 4s so the indicator stays visible
   const TG_MAX_LEN = 4000;
 
-  let streamMsg   = null;
-  let editTimer   = null;
-  let accumulated = '';
-  let lastSent    = '';
+  let streamMsg    = null;
+  let editTimer    = null;
+  let typingTimer  = null;
+  let accumulated  = '';
+  let lastSent     = '';
 
   try {
     streamMsg = await bot.sendMessage(chatId, `⏳ _${label}…_`, { parse_mode: 'Markdown' });
+    await bot.sendChatAction(chatId, 'typing');
+
+    // Keep typing indicator alive throughout generation (lasts 5s, refresh every 4s)
+    typingTimer = setInterval(() => bot.sendChatAction(chatId, 'typing').catch(() => {}), 4000);
 
     editTimer = setInterval(async () => {
       if (!accumulated || accumulated === lastSent) return;
@@ -1108,7 +1166,7 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
       try {
         await bot.editMessageText(preview, { chat_id: chatId, message_id: streamMsg.message_id });
       } catch { /* ignore rate-limit / unchanged-text errors */ }
-    }, 800);
+    }, 400);
 
     const reply = await llm.chatStream({
       userId,
@@ -1121,13 +1179,15 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
     });
 
     clearInterval(editTimer);
+    clearInterval(typingTimer);
     await bot.deleteMessage(chatId, streamMsg.message_id).catch(() => {});
     // Strip stray CJK characters occasionally injected by some LLMs (e.g. Mistral-small)
-    const clean   = reply.replace(/[\u3000-\u9fff\uff00-\uffef\u3040-\u30ff]/g, '');
+    const clean    = reply.replace(/[\u3000-\u9fff\uff00-\uffef\u3040-\u30ff]/g, '');
     const prefixed = model !== router.MODEL_SMALL ? `${label}\n\n${clean}` : clean;
     await sendLong(bot, chatId, prefixed);
   } catch (err) {
     clearInterval(editTimer);
+    clearInterval(typingTimer);
     if (streamMsg) {
       await bot.deleteMessage(chatId, streamMsg.message_id).catch(() => {});
     }
@@ -1214,6 +1274,8 @@ function register(bot) {
 
   bot.onText(/^\/dzisiaj$/, guard(m =>
     executeIntent(bot, m, { intent: 'daily_digest', lang: 'pl', params: {} })));
+
+  bot.onText(/^\/export$/, guard(m => handleExport(bot, m)));
 
   bot.onText(/^\/sum(?:\s+(.+))?$/, guard((m, match) => {
     const url = match[1]?.trim();
