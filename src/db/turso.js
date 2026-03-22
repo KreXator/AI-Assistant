@@ -4,7 +4,8 @@
  */
 'use strict';
 
-const { createClient } = require('@libsql/client');
+// Use /web build — pure HTTP/WS transport, no native bindings (works on Android/ARM64)
+const { createClient } = require('@libsql/client/web');
 
 const url       = process.env.TURSO_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN;
