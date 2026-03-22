@@ -95,12 +95,20 @@ function isAllowed(userId) {
  */
 async function sendLong(bot, chatId, text, opts = {}) {
   const MAX = 4000;
-  if (text.length <= MAX) {
-    return bot.sendMessage(chatId, text, { parse_mode: 'Markdown', ...opts });
-  }
-  for (let i = 0; i < text.length; i += MAX) {
-    await bot.sendMessage(chatId, text.slice(i, i + MAX), { parse_mode: 'Markdown' });
-  }
+  const send = async (chunk) => {
+    try {
+      await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown', ...opts });
+    } catch (err) {
+      if (err.response?.body?.includes('parse entities') || err.message?.includes('parse entities')) {
+        // Markdown parse error — retry as plain text
+        await bot.sendMessage(chatId, chunk, opts);
+      } else {
+        throw err;
+      }
+    }
+  };
+  if (text.length <= MAX) return send(text);
+  for (let i = 0; i < text.length; i += MAX) await send(text.slice(i, i + MAX));
 }
 
 // ─── Command Handlers ────────────────────────────────────────────────────────
@@ -945,7 +953,9 @@ async function handleMessage(bot, msg) {
   const manualModel = cfg.manualModel ? cfg.model : null;
 
   // Decide: web search needed?
-  const needsSearch =
+  // Guard: bot-internal listing commands must not trigger web search
+  const isBotCommand = /^(pokaż|podaj|sprawdź|lista?|list|show)\s+(zaplanowane|harmonogram|notatki|zadania|przypomnienia|pamięć|feedy|filtry|schedules|notes|todos|reminders|memory|feeds)/i.test(text);
+  const needsSearch = !isBotCommand && (
     // Imperative verbs at start of message — user wants a lookup
     // Note: \b fails after Polish diacritics, so use (?=\s|$) instead
     /^(sprawdź|podaj|pokaż|wyszukaj|znajdź|szukaj|poszukaj|check|find|search|look up|show me|tell me|what is|what are|who is)(?=\s|$)/i.test(text) ||
@@ -960,7 +970,8 @@ async function handleMessage(bot, msg) {
     // Prices / rates / crypto
     /\b(aktualna cena|aktualny kurs|kurs\s+\w+|price of|notowania|bitcoin|btc|eth\b|crypto)\b/i.test(text) ||
     // News
-    /\b(news|wiadomości\b|aktualności\b|headlines)\b/i.test(text);
+    /\b(news|wiadomości\b|aktualności\b|headlines)\b/i.test(text)
+  );
 
   let enriched = text;
   if (needsSearch) {
