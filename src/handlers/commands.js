@@ -15,7 +15,7 @@ const scheduler        = require('../scheduler/scheduler');
 const reminder         = require('../tools/reminder');
 const briefingCmd      = require('./briefingCmd');
 const bScheduler       = require('../scheduler/briefingScheduler');
-const intentHandler    = require('./intentHandler');
+const nlRouter         = require('./nlRouter');
 const weather   = require('../tools/weather');
 const voice     = require('../tools/voice');
 const vision    = require('../tools/vision');
@@ -27,6 +27,13 @@ const ALLOWED_IDS = (process.env.ALLOWED_USER_IDS || '')
 // userId (string) → { intent, lang, params, chatId, msgId, timer }
 const pendingIntents = new Map();
 const CONFIRMATION_TTL = 90_000; // 90 seconds — auto-expire pending confirmations
+
+// Intents that execute immediately — no confirmation dialog needed
+const READ_ONLY_INTENTS = new Set([
+  'list_todos', 'list_notes', 'list_reminders',
+  'list_memory', 'list_schedules', 'list_feeds',
+  'briefing_list_feeds', 'schedule_list',
+]);
 
 /** Escape Telegram Markdown V1 special chars in user-supplied text. */
 function esc(text) {
@@ -895,6 +902,31 @@ async function executeIntent(bot, msg, intent) {
       return true;
     }
 
+    // ─── Read-only list intents (routed by nlRouter) ─────────────────────────
+    case 'list_todos':
+      await handleTodos(bot, msg);
+      return true;
+
+    case 'list_notes':
+      await handleNotes(bot, msg);
+      return true;
+
+    case 'list_reminders':
+      await handleReminders(bot, msg);
+      return true;
+
+    case 'list_memory':
+      await handleMemory(bot, msg);
+      return true;
+
+    case 'list_schedules':
+      await handleScheduleList(bot, msg);
+      return true;
+
+    case 'list_feeds':
+      await executeIntent(bot, msg, { intent: 'briefing_list_feeds', lang, params: {} });
+      return true;
+
     default:
       return false;
   }
@@ -902,106 +934,82 @@ async function executeIntent(bot, msg, intent) {
 
 // ─── Plain Message → Agent ───────────────────────────────────────────────────
 
+/** Extract city name from a weather query. Returns null if not found. */
+function extractWeatherCity(text) {
+  const m = text.match(/(?:pogod[aeęiy]|weather)\s+(?:w\s+|in\s+|dla\s+|for\s+)?([A-ZŁŚÓŹ][a-zA-ZłśóźżćńąęĄĆĘŁŃÓŚŹŻ]+(?:\s+[A-ZŁŚÓŹ][a-zA-ZłśóźżćńąęĄĆĘŁŃÓŚŹŻ]+)?)/i);
+  return m ? m[1] : null;
+}
+
+async function showConfirmation(bot, msg, intent) {
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  const { intent: type, lang, params } = intent;
+  const summary = formatConfirmation(type, lang, params);
+  const sent = await bot.sendMessage(chatId,
+    `🤖 *Czy o to chodziło?*\n${summary}`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [[
+          { text: '✅ Tak, wykonaj', callback_data: `confirm:${userId}` },
+          { text: '❌ Anuluj',       callback_data: `cancel:${userId}` },
+        ]],
+      },
+    }
+  );
+  if (pendingIntents.has(String(userId))) {
+    clearTimeout(pendingIntents.get(String(userId)).timer);
+  }
+  const timer = setTimeout(() => pendingIntents.delete(String(userId)), CONFIRMATION_TTL);
+  pendingIntents.set(String(userId), { intent, chatId, msgId: sent.message_id, timer });
+}
+
 async function handleMessage(bot, msg) {
-  const userId  = msg.from.id;
-  const chatId  = msg.chat.id;
-  const text    = msg.text?.trim();
+  const userId = msg.from.id;
+  const chatId = msg.chat.id;
+  const text   = msg.text?.trim();
   if (!text) return;
 
   // Store chatId so scheduler can push messages even without a prior message
   const cfg = await db.getConfig(userId);
   if (cfg.chatId !== chatId) await db.setConfig(userId, { chatId });
 
-  // Natural language intent detection — runs only when trigger words present
-  const intent = await intentHandler.detectIntent(text);
-  if (intent) {
-    const { intent: type, lang, params } = intent;
+  // Unified NL router — single LLM call for all routing decisions
+  const routeResult = await nlRouter.route(text);
 
-    // Read-only intents execute immediately — no confirmation needed
-    if (type === 'briefing_list_feeds' || type === 'schedule_list') {
-      const handled = await executeIntent(bot, msg, intent);
-      if (handled) return;
+  if (routeResult.type === 'bot_command') {
+    const intent = { intent: routeResult.intent, lang: routeResult.lang, params: routeResult.params };
+    if (READ_ONLY_INTENTS.has(routeResult.intent)) {
+      await executeIntent(bot, msg, intent);
     } else {
-      // All state-changing intents: show confirmation with inline buttons
-      const summary = formatConfirmation(type, lang, params);
-      const sent = await bot.sendMessage(chatId,
-        `🤖 *Czy o to chodziło?*\n${summary}`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [[
-              { text: '✅ Tak, wykonaj', callback_data: `confirm:${userId}` },
-              { text: '❌ Anuluj',       callback_data: `cancel:${userId}` },
-            ]],
-          },
-        }
-      );
-      // Overwrite any previous pending intent for this user
-      if (pendingIntents.has(String(userId))) {
-        clearTimeout(pendingIntents.get(String(userId)).timer);
-      }
-      const timer = setTimeout(() => pendingIntents.delete(String(userId)), CONFIRMATION_TTL);
-      pendingIntents.set(String(userId), {
-        intent, chatId, msgId: sent.message_id, timer,
-      });
-      return;
+      await showConfirmation(bot, msg, intent);
     }
-  }
-
-  // NL routing for read-only bot commands — direct dispatch, no LLM needed
-  if (/\b(zaplanowane\s+(wyszukiwania?|zadania?|harmonogram|szukania?)|mój\s+harmonogram|scheduled\s+searches?)\b/i.test(text) ||
-      /^(pokaż|lista?|list|show|wyświetl)\s+(zaplanowane|harmonogram|schedules?)/i.test(text)) {
-    return handleScheduleList(bot, msg);
-  }
-  if (/^(pokaż|lista?\s+(zada[nń]|todo)|show\s+(todos?|tasks?))/i.test(text) ||
-      /\bmoje\s+(zadania|todos?)\b/i.test(text)) {
-    return handleTodos(bot, msg);
-  }
-  if (/^(pokaż|lista?|list|show|wyświetl)\s+(notatki|notes?)/i.test(text) ||
-      /\bmoje\s+notatki\b/i.test(text)) {
-    return handleNotes(bot, msg);
-  }
-  if (/^(pokaż|lista?|list|show|wyświetl)\s+(przypomnienia|reminders?)/i.test(text) ||
-      /\bmoje\s+przypomnienia\b/i.test(text)) {
-    return handleReminders(bot, msg);
-  }
-  if (/^(pokaż|lista?|list|show|wyświetl)\s+(pamięć|memory|zapamiętane|fakty)/i.test(text) ||
-      /\bmoja\s+pamięć\b/i.test(text)) {
-    return handleMemory(bot, msg);
+    return;
   }
 
   await bot.sendChatAction(chatId, 'typing');
 
-  const manualModel = cfg.manualModel ? cfg.model : null;
-
-  // Decide: web search needed?
-  // Guard: bot-internal listing commands must not trigger web search
-  const isBotCommand = /^(pokaż|podaj|sprawdź|lista?|list|show)\s+(zaplanowane|harmonogram|notatki|zadania|przypomnienia|pamięć|feedy|filtry|schedules|notes|todos|reminders|memory|feeds)/i.test(text);
-  const needsSearch = !isBotCommand && (
-    // Imperative verbs at start of message — user wants a lookup
-    // Note: \b fails after Polish diacritics, so use (?=\s|$) instead
-    /^(sprawdź|podaj|pokaż|wyszukaj|znajdź|szukaj|poszukaj|check|find|search|look up|show me|tell me|what is|what are|who is)(?=\s|$)/i.test(text) ||
-    // Explicit search anywhere in message
-    /\b(search|wyszukaj|google|find|znajdź)\b.+/i.test(text) ||
-    // "what is X" — factual lookup
-    (/\bco to jest\b/i.test(text) && text.length > 40) ||
-    // Current/today/recent info
-    /\b(dzisiaj|dzisiejszy|dzisiejsz\w*|wczoraj|teraz|aktualnie|obecnie|today|yesterday|right now|latest|najnowszy\w*|najnowsze\w*)\b/i.test(text) ||
-    // Sports / results
-    /\b(kto wygrał|who won|wyniki\b|results?\b|score|standings|tabela ligowa|klasyfikacja)\b/i.test(text) ||
-    // Prices / rates / crypto
-    /\b(aktualna cena|aktualny kurs|kurs\s+\w+|price of|notowania|bitcoin|btc|eth\b|crypto)\b/i.test(text) ||
-    // News
-    /\b(news|wiadomości\b|aktualności\b|headlines)\b/i.test(text)
-  );
-
   let enriched = text;
-  if (needsSearch) {
+
+  if (routeResult.type === 'web_search') {
+    // Use dedicated weather tool for weather queries
+    if (/pogod[aeęiy]|weather\b/i.test(text)) {
+      const city = extractWeatherCity(text);
+      if (city) {
+        try {
+          const wx = await weather.getWeather(city);
+          return bot.sendMessage(chatId, wx, { parse_mode: 'Markdown' });
+        } catch {
+          // fall through to generic web search
+        }
+      }
+    }
     await bot.sendMessage(chatId, '🔍 Searching the web first...');
     const results = await search.webSearch(text);
     enriched = `User asked: ${text}\n\nContext from web search:\n${results}`;
   }
 
+  const manualModel  = cfg.manualModel ? cfg.model : null;
   const model        = manualModel || router.routeModel(text, null);
   const label        = router.modelLabel(model);
   const displayModel = llm.resolveDisplayModel(model);

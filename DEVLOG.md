@@ -1,5 +1,23 @@
 # DEVLOG — Termux AI Assistant
 
+## 2026-03-22 — Unified NL router (nlRouter.js)
+
+### Files changed
+- **`src/handlers/nlRouter.js`** (NEW) — replaces intentHandler.js + scattered regex routing; single LLM call classifies every message into `bot_command | web_search | chat`; 8s timeout, always falls back to `chat`
+- **`src/handlers/commands.js`** — removed intentHandler import, TRIGGER_RE, needsSearch, isBotCommand guard, 5 NL routing regex blocks; added nlRouter, READ_ONLY_INTENTS set, showConfirmation(), extractWeatherCity(), new list intents in executeIntent() (list_todos, list_notes, list_reminders, list_memory, list_schedules, list_feeds)
+- **`src/handlers/intentHandler.js`** — DELETED (superseded by nlRouter.js)
+
+### Key behavior changes
+- Every plain-text message now goes through one LLM router call instead of regex heuristics
+- "Sprawdź pogodę" → web_search → weather tool (no longer misses)
+- "Pokaż zadania/notatki/przypomnienia/pamięć" → bot_command/list_* (no longer hits web search)
+- Weather queries with city name → direct Open-Meteo lookup (no web search intermediary)
+- LLM router timeout: 8s → falls back to chat on any error
+
+### Pending
+- Test all routing paths in Telegram (see DEVLOG plan verification table)
+- Consider /update on Minisforum + phone to deploy
+
 ## 2026-03-21 — Briefing bugfix + web search + /update + auto-restart
 
 ### Files changed
