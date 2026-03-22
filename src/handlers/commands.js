@@ -1192,24 +1192,27 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
         }
       }
     }
+    // Navigation queries: skip LLM entirely — always redirect to mapping apps
+    if (routeResult.params?.subtype === 'navigation') {
+      const q = encodeURIComponent(text);
+      return bot.sendMessage(chatId,
+        `🗺 Nie podaję tras z głowy — mogę wymyślić ulice, których nie ma.\n\n` +
+        `Sprawdź tutaj:\n` +
+        `• [Komoot](https://www.komoot.com/)\n` +
+        `• [Google Maps](https://www.google.com/maps/dir/?q=${q})\n` +
+        `• [OpenStreetMap](https://www.openstreetmap.org/directions?from=&to=&route=foot)`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
     await bot.sendMessage(chatId, '🔍 Searching the web first...');
     const rawResults = await search.webSearch(text);
     // Strip **double asterisks** — they render incorrectly in Telegram Markdown V1
     const results = rawResults.replace(/\*\*/g, '');
     const lang    = routeResult.lang === 'en' ? 'English' : 'Polish';
 
-    if (routeResult.params?.subtype === 'navigation') {
-      // Navigation: LLM must only use search results — never invent street names
-      enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\n` +
-        `Write a direct ${lang} answer to: "${text}".\n` +
-        `CRITICAL: Use ONLY information from the search results above. ` +
-        `If the results do not contain specific local route or street data for the requested location, ` +
-        `say you cannot provide a reliable route and recommend Komoot (komoot.com) or Google Maps instead. ` +
-        `Do NOT invent street names, park names, or routes. Start your answer immediately.`;
-    } else {
-      // Explicit instruction: do NOT echo/list the results, just answer directly
-      enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\nWrite a direct ${lang} answer to: "${text}". Do not output any header like "Context from web search:" — start your answer immediately.`;
-    }
+    // Explicit instruction: do NOT echo/list the results, just answer directly
+    enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\nWrite a direct ${lang} answer to: "${text}". Do not output any header like "Context from web search:" — start your answer immediately.`;
   }
 
   const manualModel  = cfg.manualModel ? cfg.model : null;
