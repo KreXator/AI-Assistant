@@ -1205,14 +1205,18 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
       );
     }
 
-    await bot.sendMessage(chatId, '🔍 Searching the web first...');
-    const rawResults = await search.webSearch(text);
-    // Strip **double asterisks** — they render incorrectly in Telegram Markdown V1
-    const results = rawResults.replace(/\*\*/g, '');
-    const lang    = routeResult.lang === 'en' ? 'English' : 'Polish';
-
-    // Explicit instruction: do NOT echo/list the results, just answer directly
-    enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\nWrite a direct ${lang} answer to: "${text}". Do not output any header like "Context from web search:" — start your answer immediately.`;
+    try {
+      await bot.sendMessage(chatId, '🔍 Searching the web first...');
+      const rawResults = await search.webSearch(text);
+      // Strip **double asterisks** — they render incorrectly in Telegram Markdown V1
+      const results = rawResults.replace(/\*\*/g, '');
+      const lang    = routeResult.lang === 'en' ? 'English' : 'Polish';
+      // Explicit instruction: do NOT echo/list the results, just answer directly
+      enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\nWrite a direct ${lang} answer to: "${text}". Do not output any header like "Context from web search:" — start your answer immediately.`;
+    } catch (searchErr) {
+      console.warn('[web_search] search failed, falling back to chat:', searchErr.message);
+      // Fall through with original text — LLM will answer from training data
+    }
   }
 
   const manualModel  = cfg.manualModel ? cfg.model : null;
@@ -1294,7 +1298,10 @@ function register(bot) {
       if (!isAllowed(msg.from.id)) {
         return bot.sendMessage(msg.chat.id, '🚫 Unauthorized.');
       }
-      return handler(msg, match);
+      return handler(msg, match).catch(err => {
+        console.error('[guard] unhandled error in handler:', err.message, err.stack);
+        bot.sendMessage(msg.chat.id, `❌ Unexpected error: ${err.message}`).catch(() => {});
+      });
     };
   }
 
