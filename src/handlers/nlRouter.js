@@ -126,6 +126,11 @@ Examples:
 "jakie są dzisiejsze wiadomości?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
 "kto wygrał mecz dziś?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
 "aktualny kurs EUR/PLN" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
+"podaj przegląd wiadomości" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
+"podaj wiadomości lokalne" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
+"co słychać w Polsce?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
+"najnowsze informacje" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
+"jaka jest teraz pogoda?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
 "Jakie masz możliwości?" → {"type":"chat","intent":null,"lang":"pl","params":{}}
 "napisz mi funkcję w Python" → {"type":"chat","intent":null,"lang":"pl","params":{}}
 "jak działa RSS?" → {"type":"chat","intent":null,"lang":"pl","params":{}}
@@ -200,8 +205,12 @@ const SUMMARIZE_TRIGGER_RE = /\b(podsumuj|streszcz|streścij|summarize|tldr|prze
 // "co mam dziś", "plan na dziś", "standup"
 const DAILY_DIGEST_RE = /\b(co\s+mam\s+dzi[śs]|plan\s+na\s+dzi[śs]|m[oó]j\s+dzie[nń]|standup|co\s+dzi[śs]\b)/i;
 
-// Navigation queries → web_search (LLM hallucinates local street names)
-const NAV_SEARCH_RE = /\b(jak\s+(?:dojechać|dojadę|dotrzeć|dojść)|drog[ęa]\s+powrotn|trasa?\s+rowerow|trasa?\s+(?:piesz|samochodow)|(?:wymyśl|zaproponuj|pokaż|podaj|polecasz?|poleć)\s+.{0,40}tras[ęea]?|jak[aą]\s+tras[ęa]|(?:lekk[aą]|ciekaw[aą]|fajna?|krótk[aą]|ładn[aą])\s+tras[ęa]|tras[ęa]\s+.{0,30}(?:polecasz?|zaproponuj|wymyśl|poleć)|wycieczk[ięa]\s+rowerow)/i;
+// Live/current-data queries → web_search
+// Covers: news, weather, finance, sports, local events — anything time-sensitive.
+// LLM models hallucinate these categories when they don't have real-time access.
+// prettier-ignore
+// Note: \b avoided after non-ASCII chars (ł, ą etc.) — use (?:\s|$) lookahead where needed
+const LIVE_DATA_RE = /\b(wiadomo[śs]ci|aktualno[śs]ci|przeg[lł][aą]d\s+wiadomo[śs]ci|skr[oó]t\s+wiadomo[śs]ci|(?:lokalne?|regionalne?)\s+wiadomo[śs]ci|wiadomo[śs]ci\s+(?:lokalne?|z\s+\w+)|headlines?|news\b|co\s+si[ęe]\s+dzieje|co\s+nowego(?:\s|$)|(?:najnowsze?|ostatnie?|aktualne?|bież[aą]ce?)\s+(?:wiadomo[śs]ci|info|doniesienia|wydarzen)|pogoda\b|prognoza\s+(?:pogody|na\s+\w+)|ile\s+stopni|kurs\s+\w+|notowania\b|gie[lł]da\b|bitcoin\b|btc\b|\beth\b|kryptowalu[tc]|cena\s+(?:benzyny|gazu|pr[aą]du|ropy|diesla)|wyniki?\s+(?:meczu?|ligi|rozgrywek)|tabela\s+\w*\s*ligi|kto\s+wygra[lł]|co\s+(?:graj[aą]|leci)(?:\s|$)|wydarzenia\s+w\b|imprezy?\s+w\b)/i;
 
 const LIST_PRECHECK = [
   { re: /\b(moje\s+)?notatki\b|\blista\s+notatek\b|\bpokaż\s+notatki\b/i,                intent: 'list_notes'     },
@@ -232,6 +241,11 @@ function precheck(text) {
   // Daily digest
   if (DAILY_DIGEST_RE.test(text)) {
     return { type: 'bot_command', intent: 'daily_digest', lang: 'pl', params: {} };
+  }
+
+  // Live/current-data queries → web_search (LLM hallucinates time-sensitive data)
+  if (LIVE_DATA_RE.test(text)) {
+    return { type: 'web_search', intent: null, lang: 'pl', params: {} };
   }
 
   // Navigation queries → web_search with subtype flag (LLM hallucinates local streets)
@@ -274,9 +288,11 @@ async function route(text) {
       callLLM(text),
       new Promise((_, rej) => setTimeout(() => rej(new Error('router timeout')), ROUTE_TIMEOUT_MS)),
     ]);
-    return parse(raw) || { type: 'chat', intent: null, lang: 'pl', params: {} };
+    // If LLM router returns ambiguous/unparseable result → web_search is safer than chat
+    // (unnecessary search is harmless; hallucinating facts is not)
+    return parse(raw) || { type: 'web_search', intent: null, lang: 'pl', params: {} };
   } catch {
-    return { type: 'chat', intent: null, lang: 'pl', params: {} };
+    return { type: 'web_search', intent: null, lang: 'pl', params: {} };
   }
 }
 
