@@ -247,6 +247,11 @@ function precheck(text) {
     return { type: 'bot_command', intent: 'daily_digest', lang: 'pl', params: {} };
   }
 
+  // Local events queries → redirect (LLM has no local event data, always hallucinates)
+  if (/\b(wydarzen[iy]a?\s+(?:lokalne?|na\s+weekend|w\s+\w+)|co\s+(?:robi[ćc]|zwiedzi[ćc]|zobaczy[ćc])\s+(?:z\s+dzieckiem|z\s+córk|z\s+synem|w\s+\w+)|atrakcje?\s+(?:dla|w\s+\w+)|co\s+polecasz\s+(?:z\s+dzieckiem|z\s+córk|z\s+synem|w\s+\w+))\b/i.test(text)) {
+    return { type: 'web_search', intent: null, lang: 'pl', params: { subtype: 'local_events' } };
+  }
+
   // Live/current-data queries → web_search (LLM hallucinates time-sensitive data)
   if (LIVE_DATA_RE.test(text)) {
     return { type: 'web_search', intent: null, lang: 'pl', params: {} };

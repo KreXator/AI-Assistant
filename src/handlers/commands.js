@@ -1192,6 +1192,19 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
         }
       }
     }
+    // Local events: skip LLM — no reliable local event data, always hallucinates
+    if (routeResult.params?.subtype === 'local_events') {
+      const q = encodeURIComponent(text);
+      return bot.sendMessage(chatId,
+        `📅 Nie mam dostępu do lokalnych kalendarzy wydarzeń — podałbym wymyślone imprezy.\n\n` +
+        `Sprawdź tutaj:\n` +
+        `• [Zielona Góra — miasto (imprezy)](https://www.zielona-gora.pl)\n` +
+        `• [Facebook Events](https://www.facebook.com/events/)\n` +
+        `• [Google: ${text}](https://www.google.com/search?q=${q})`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
     // Navigation queries: skip LLM entirely — always redirect to mapping apps
     if (routeResult.params?.subtype === 'navigation') {
       const q = encodeURIComponent(text);
@@ -1211,8 +1224,13 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
       // Strip **double asterisks** — they render incorrectly in Telegram Markdown V1
       const results = rawResults.replace(/\*\*/g, '');
       const lang    = routeResult.lang === 'en' ? 'English' : 'Polish';
-      // Explicit instruction: do NOT echo/list the results, just answer directly
-      enriched = `[Search results for context only — do not repeat or list them]\n${results}\n\nWrite a direct ${lang} answer to: "${text}". Do not output any header like "Context from web search:" — start your answer immediately.`;
+      enriched = `[WEB SEARCH RESULTS]\n${results}\n\n` +
+        `Answer the following question in ${lang}: "${text}"\n` +
+        `STRICT RULES:\n` +
+        `- Use ONLY information explicitly present in the search results above.\n` +
+        `- Do NOT add any facts, names, dates, places, prices or events from your training data.\n` +
+        `- If the search results do not contain enough information to answer, say so clearly.\n` +
+        `- Do not repeat or list the raw search results. Start your answer immediately.`;
     } catch (searchErr) {
       console.warn('[web_search] search failed, falling back to chat:', searchErr.message);
       // Fall through with original text — LLM will answer from training data
