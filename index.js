@@ -14,8 +14,9 @@ const commands    = require('./src/handlers/commands');
 const scheduler          = require('./src/scheduler/scheduler');
 const reminder           = require('./src/tools/reminder');
 const briefingScheduler  = require('./src/scheduler/briefingScheduler');
-const db          = require('./src/db/database');
-const lock        = require('./src/db/instanceLock');
+const db             = require('./src/db/database');
+const lock           = require('./src/db/instanceLock');
+const semanticRouter = require('./src/llm/semanticRouter');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -42,6 +43,11 @@ async function startBot(bot) {
   await scheduler.init(bot);
   await reminder.init(bot);
   await briefingScheduler.init(bot);
+
+  // Preload semantic router embeddings in background (avoids cold start on first message)
+  if (process.env.OPENROUTER_API_KEY) {
+    semanticRouter.init().catch(err => console.warn('[semanticRouter] preload failed:', err.message));
+  }
 
   bot.on('polling_error', err => {
     console.error('[Polling error]', err.code, err.message);

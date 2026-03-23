@@ -12,8 +12,9 @@
  */
 'use strict';
 
-const openrouter = require('../llm/openrouter');
-const ollama     = require('../llm/ollama');
+const openrouter     = require('../llm/openrouter');
+const ollama         = require('../llm/ollama');
+const semanticRouter = require('../llm/semanticRouter');
 
 const ROUTE_TIMEOUT_MS = 8_000;
 
@@ -305,6 +306,21 @@ async function route(text, context = {}) {
     return { type: 'web_search', intent: null, lang: 'pl', params: {} };
   }
 
+  // ── Semantic router (embedding-based, ~92% accuracy) ──────────────────────
+  // Handles web_search vs chat. bot_command always falls to LLM for param extraction.
+  if (process.env.OPENROUTER_API_KEY) {
+    try {
+      const { route: semRoute } = await semanticRouter.classify(text);
+      if (semRoute === 'web_search' || semRoute === 'chat') {
+        return { type: semRoute, intent: null, lang: 'pl', params: {} };
+      }
+      // null (low confidence) or 'bot_command' → fall through to LLM
+    } catch (err) {
+      console.warn('[nlRouter] semantic router failed, falling back to LLM:', err.message);
+    }
+  }
+
+  // ── LLM router fallback (bot_command param extraction + offline fallback) ──
   try {
     const raw = await Promise.race([
       callLLM(text),

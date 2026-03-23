@@ -218,6 +218,30 @@ async function completeVision(base64Image, prompt, mimeType = 'image/jpeg') {
   return content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
 }
 
+// ─── Embeddings ───────────────────────────────────────────────────────────────
+
+/**
+ * Embed an array of strings using text-embedding-3-small via OpenRouter.
+ * Returns an array of float vectors in the same order as the input.
+ * Cost: ~$0.02/1M tokens — effectively free for routing use.
+ * @param {string[]} texts
+ * @returns {Promise<number[][]>}
+ */
+async function embed(texts) {
+  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not set');
+  const res = await axios.post(`${BASE_URL}/embeddings`, {
+    model: 'openai/text-embedding-3-small',
+    input: texts,
+  }, {
+    timeout: 30_000,
+    headers: orHeaders(),
+  });
+  // Sort by index to preserve input order (OpenRouter may return out-of-order)
+  return res.data.data
+    .sort((a, b) => a.index - b.index)
+    .map(d => d.embedding);
+}
+
 // ─── Health check ─────────────────────────────────────────────────────────────
 
 /**
@@ -240,6 +264,7 @@ module.exports = {
   complete,
   completeStream,
   completeVision,
+  embed,
   isReachable,
   mapModel,
   OR_MODEL_SMALL,
