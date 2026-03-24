@@ -1,5 +1,78 @@
 # DEVLOG — Termux AI Assistant
 
+## 2026-03-24 — Session 3: smart scheduled alert routing
+
+### Files changed
+- **`src/scheduler/scheduler.js`** — added `executeQuery()` with type-based routing; replaced hardcoded `webSearch()` in both `startTask` and `runNow`
+- **`src/tools/search.js`** — added `serperJobsSearch()`: Serper `/search` with `gl:'pl'`/`hl:'pl'`, handles Google Jobs cards array, falls back to organic with full snippets
+
+### Key behavior changes
+- `pogoda Zielona Góra` → `getWeather('Zielona Góra')` — real temp/humidity/wind data, not website links
+- News queries (`wiadomości`, `aktualności`, `przegląd`) → `serperNewsSearch()` — actual headlines with dates, not portal homepages
+- Job queries (`pracuj.pl`, `oferty pracy`) → `serperJobsSearch()` — Google Jobs cards if available, otherwise full-snippet organic results with Polish locale
+
+### Commits
+- `69476a2` — feat: smart alert routing — weather/news/jobs use dedicated handlers
+
+### Pending
+- Test `/schedule test` on Railway to verify routing works in production
+- Monitor qwen-2.5-vl:free rate limits
+- Przetestować streaming na Minisforum (Ollama) — NDJSON parser
+- Rozważyć `/export` (backup wszystkich danych)
+
+## 2026-03-24 — Session 2: news routing fixes + vision model
+
+### Files changed
+- **`src/handlers/nlRouter.js`** — remember guard (`zapamiętaj/zapisz` skips news precheck); no other changes
+- **`src/tools/search.js`** — `cleanNewsQuery()` strips Polish command verbs before Serper; `tbs:'qdr:w'` for past-week recency filter
+- **`src/tools/vision.js`** — fixed error surfacing: when OpenRouter fails + Ollama unavailable, throws OpenRouter error (not Ollama ECONNREFUSED)
+- **`src/handlers/commands.js`** — improved vision error messages: 429 → rate-limit message, 4xx → API error details
+- **`src/llm/openrouter.js`** — vision model changed from `gemma-3-12b-it:free` (rate-limited) to `qwen/qwen-2.5-vl-7b-instruct:free`; cascade to `google/gemini-2.0-flash-lite-001` on 429
+
+### Key behavior changes
+- `"Zapamiętaj dla wiadomości lokalnych, że..."` → routes to `remember` bot_command (not news)
+- `"Podaj wiadomości z kraju"` → cleaned to `"wiadomości z kraju"` before Serper (no "PODAJ DALEJ" false matches)
+- News results filtered to past week (`tbs:qdr:w`)
+- Vision: dedicated Qwen 2.5 VL model (not general Gemma); auto-cascade to cheap paid fallback on rate limit
+
+### Commits
+- `1fc708e` — fix: news routing — remember guard + query cleaning + recency filter
+- `9f1970d` — fix: vision error handling — surface OpenRouter error, not Ollama ECONNREFUSED
+- `1514d0c` — fix: switch vision model to qwen-2.5-vl + 429 cascade to gemini-flash-lite
+
+### Pending
+- Monitor qwen-2.5-vl:free rate limits in production
+- Monitor semantic router accuracy (check `[semanticRouter]` log lines)
+- Przetestować streaming na Minisforum (Ollama) — czy NDJSON parser działa
+- Rozważyć `/export` (backup wszystkich danych)
+
+## 2026-03-24 — Session: hallucination fixes + embedding semantic router
+
+### Files changed
+- **`src/llm/openrouter.js`** — added `embed(texts)` using `/embeddings` endpoint (`openai/text-embedding-3-small`)
+- **`src/llm/semanticRouter.js`** (NEW) — embedding-based router; 20 examples/route (web_search, chat); cosine similarity vs centroid vectors; `init()` + `classify()`; `CONFIDENCE_THRESHOLD = 0.55`
+- **`src/handlers/nlRouter.js`** — integrated semantic router (between precheck and LLM fallback); changed router model to Llama 3.2 3B; added NEWS_RE precheck → `subtype:'news'`; added remember guard (zapamiętaj/zapisz → skip prechecks)
+- **`src/tools/search.js`** — added `serperNewsSearch()` using `/news` endpoint; `cleanNewsQuery()` strips Polish command verbs; `tbs:'qdr:w'` for past-week recency
+- **`src/handlers/commands.js`** — added `subtype:'news'` handler (calls serperNewsSearch, bypasses LLM)
+- **`index.js`** — added `semanticRouter.init()` preload at startup (background, avoids cold start)
+
+### Key behavior changes
+- Routing accuracy: regex precheck → semantic embeddings (~92-96%) → LLM router → chat fallback
+- **News queries** ("wiadomości", "co się dzieje", "aktualności" etc.) → Serper `/news` endpoint → formatted headlines with dates and source links, **no LLM** → zero hallucination
+- **"zapamiętaj X wiadomości"** no longer accidentally treated as news query
+- **Old news** fix: `tbs:'qdr:w'` filters to past week; "Podaj wiadomości z kraju" no longer returns "PODAJ DALEJ" foundation results
+- Semantic router preloaded at bot startup to avoid embedding delay on first message
+
+### Commits
+- `edc7177` — feat: embedding-based semantic router (step 3)
+- `b9d9fe7` — fix: bypass LLM for news queries — show Serper /news results directly
+- `1fc708e` — fix: news routing — remember guard + query cleaning + recency filter
+
+### Pending
+- Monitor semantic router accuracy in production (check logs for `[semanticRouter]` lines)
+- Przetestować streaming na Minisforum (Ollama) — czy NDJSON parser działa
+- Rozważyć `/export` (backup wszystkich danych)
+
 ## 2026-03-22 — Session 2: code review + 3 new features + streaming
 
 ### Files changed

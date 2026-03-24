@@ -5,21 +5,21 @@
  */
 'use strict';
 
-const db         = require('../db/database');
-const llm        = require('../llm/client');
+const db = require('../db/database');
+const llm = require('../llm/client');
 const openrouter = require('../llm/openrouter');
-const router     = require('../agent/router');
-const search    = require('../tools/search');
-const coder     = require('../tools/coder');
-const scheduler        = require('../scheduler/scheduler');
-const reminder         = require('../tools/reminder');
-const briefingCmd      = require('./briefingCmd');
-const bScheduler       = require('../scheduler/briefingScheduler');
-const nlRouter         = require('./nlRouter');
-const axios      = require('axios');
-const weather    = require('../tools/weather');
-const voice      = require('../tools/voice');
-const vision     = require('../tools/vision');
+const router = require('../agent/router');
+const search = require('../tools/search');
+const coder = require('../tools/coder');
+const scheduler = require('../scheduler/scheduler');
+const reminder = require('../tools/reminder');
+const briefingCmd = require('./briefingCmd');
+const bScheduler = require('../scheduler/briefingScheduler');
+const nlRouter = require('./nlRouter');
+const axios = require('axios');
+const weather = require('../tools/weather');
+const voice = require('../tools/voice');
+const vision = require('../tools/vision');
 const summarizer = require('../tools/summarizer');
 
 const ALLOWED_IDS = (process.env.ALLOWED_USER_IDS || '')
@@ -32,7 +32,7 @@ const CONFIRMATION_TTL = 90_000; // 90 seconds — auto-expire pending confirmat
 
 // Per-user last route type — for context-aware follow-up routing
 // Entry expires after 5 minutes of inactivity
-const lastRouteMap  = new Map(); // userId → { type, ts }
+const lastRouteMap = new Map(); // userId → { type, ts }
 const LAST_ROUTE_TTL = 5 * 60 * 1000;
 function getLastRoute(userId) {
   const entry = lastRouteMap.get(String(userId));
@@ -62,26 +62,26 @@ function formatConfirmation(type, lang, params) {
   switch (type) {
     case 'briefing_add_feed':
       return `${pl ? 'Dodaj feed' : 'Add feed'} *${esc(params.label || '?')}*\n` +
-             `URL: \`${esc(params.url || '?')}\`\n` +
-             `${pl ? 'Kategoria' : 'Category'}: *${esc(params.category || 'general')}*`;
+        `URL: \`${esc(params.url || '?')}\`\n` +
+        `${pl ? 'Kategoria' : 'Category'}: *${esc(params.category || 'general')}*`;
     case 'briefing_on':
       return pl ? 'Włącz codzienne raporty briefing' : 'Enable daily briefing reports';
     case 'briefing_off':
       return pl ? 'Wyłącz codzienne raporty briefing' : 'Disable daily briefing reports';
     case 'briefing_time_morning':
       return (pl ? 'Ustaw poranny raport na' : 'Set morning briefing to') +
-             ` *${esc(params.time || '?')}*` +
-             (params.enable ? (pl ? ' i włącz' : ' and enable') : '');
+        ` *${esc(params.time || '?')}*` +
+        (params.enable ? (pl ? ' i włącz' : ' and enable') : '');
     case 'briefing_time_evening':
       return (pl ? 'Ustaw wieczorny raport na' : 'Set evening briefing to') +
-             ` *${esc(params.time || '?')}*` +
-             (params.enable ? (pl ? ' i włącz' : ' and enable') : '');
+        ` *${esc(params.time || '?')}*` +
+        (params.enable ? (pl ? ' i włącz' : ' and enable') : '');
     case 'briefing_keywords_add':
       return (pl ? 'Dodaj filtr słów kluczowych:' : 'Add keyword filter:') +
-             ` *${esc(params.keyword || '?')}*`;
+        ` *${esc(params.keyword || '?')}*`;
     case 'briefing_keywords_remove':
       return (pl ? 'Usuń filtr:' : 'Remove filter:') +
-             ` *${esc(params.keyword || '?')}*`;
+        ` *${esc(params.keyword || '?')}*`;
     case 'briefing_run_now': {
       const t = params.type === 'evening'
         ? (pl ? 'wieczorny' : 'evening') : (pl ? 'poranny' : 'morning');
@@ -89,17 +89,17 @@ function formatConfirmation(type, lang, params) {
     }
     case 'schedule_add':
       return (pl ? 'Zaplanuj wyszukiwanie codziennie o' : 'Schedule daily search at') +
-             ` *${esc(params.time || '?')}*\n` +
-             (pl ? 'Zapytanie:' : 'Query:') + ` _${esc(params.query || '?')}_`;
+        ` *${esc(params.time || '?')}*\n` +
+        (pl ? 'Zapytanie:' : 'Query:') + ` _${esc(params.query || '?')}_`;
     case 'schedule_list':
       return pl ? 'Pokaż listę zaplanowanych wyszukiwań' : 'List scheduled searches';
     case 'remind':
       return (pl ? 'Ustaw przypomnienie' : 'Set reminder') +
-             ` *${esc(params.when || '?')}*\n` +
-             (pl ? 'Treść:' : 'Text:') + ` _${esc(params.text || '?')}_`;
+        ` *${esc(params.when || '?')}*\n` +
+        (pl ? 'Treść:' : 'Text:') + ` _${esc(params.text || '?')}_`;
     case 'remember':
       return (pl ? 'Zapamiętaj fakt:' : 'Remember fact:') +
-             ` _${esc(params.fact || '?')}_`;
+        ` _${esc(params.fact || '?')}_`;
     default:
       return esc(type);
   }
@@ -217,7 +217,7 @@ async function handleUpdate(bot, msg) {
   try {
     // 1. Check for new commits without pulling
     await run('git', ['fetch', 'origin']);
-    const localHash  = await run('git', ['rev-parse', 'HEAD']);
+    const localHash = await run('git', ['rev-parse', 'HEAD']);
     const remoteHash = await run('git', ['rev-parse', 'origin/main']);
 
     if (localHash === remoteHash) {
@@ -253,15 +253,15 @@ async function handleUpdate(bot, msg) {
 }
 
 async function handleStatus(bot, msg) {
-  const userId      = msg.from.id;
-  const cfg         = await db.getConfig(userId);
-  const schedules   = await db.getSchedules(userId);
-  const searchMode  = process.env.SERPER_API_KEY ? '✅ Serper (Google)' : '⚠️ DuckDuckGo scrape';
-  const orKey       = !!process.env.OPENROUTER_API_KEY;
-  const orAlive     = orKey ? await llm.isOpenRouterReachable() : false;
+  const userId = msg.from.id;
+  const cfg = await db.getConfig(userId);
+  const schedules = await db.getSchedules(userId);
+  const searchMode = process.env.SERPER_API_KEY ? '✅ Serper (Google)' : '⚠️ DuckDuckGo scrape';
+  const orKey = !!process.env.OPENROUTER_API_KEY;
+  const orAlive = orKey ? await llm.isOpenRouterReachable() : false;
   const ollamaAlive = await llm.isOllamaRunning();
 
-  const orLine    = orKey
+  const orLine = orKey
     ? `✅ configured (${orAlive ? 'online' : 'unreachable'})`
     : '➖ not configured';
   const ollamaLine = ollamaAlive ? '✅ running' : '❌ offline';
@@ -292,10 +292,10 @@ async function handleClear(bot, msg) {
 // Named model aliases — resolved to actual model IDs before storing
 const MODEL_ALIASES = {
   premium: openrouter.OR_MODEL_PREMIUM,
-  code:    openrouter.OR_MODEL_CODER,
-  large:   openrouter.OR_MODEL_LARGE,
-  medium:  openrouter.OR_MODEL_MEDIUM,
-  small:   openrouter.OR_MODEL_SMALL,
+  code: openrouter.OR_MODEL_CODER,
+  large: openrouter.OR_MODEL_LARGE,
+  medium: openrouter.OR_MODEL_MEDIUM,
+  small: openrouter.OR_MODEL_SMALL,
 };
 
 async function handleModel(bot, msg, args) {
@@ -310,7 +310,7 @@ async function handleModel(bot, msg, args) {
       `  \`/model premium\` — Gemini Flash Lite (paid, no limits)`
     );
   }
-  const input     = args.join(' ').toLowerCase();
+  const input = args.join(' ').toLowerCase();
   if (input === 'auto') {
     await db.setConfig(userId, { model: router.MODEL_SMALL, manualModel: false });
     return bot.sendMessage(msg.chat.id, '✅ Auto-routing re-enabled.');
@@ -328,7 +328,7 @@ async function handleModels(bot, msg) {
 }
 
 async function handlePersona(bot, msg, args) {
-  const userId  = msg.from.id;
+  const userId = msg.from.id;
   const persona = args[0] || 'default';
   await db.setConfig(userId, { persona });
   await bot.sendMessage(msg.chat.id, `🎭 Persona set to: *${persona}*`);
@@ -444,7 +444,7 @@ async function handleDone(bot, msg, args) {
 async function handleSchedule(bot, msg, args) {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
-  const sub    = args[0];
+  const sub = args[0];
 
   // /schedule (no args) or /schedules → list
   if (!sub || sub === 'list') {
@@ -454,7 +454,7 @@ async function handleSchedule(bot, msg, args) {
   // /schedule add HH:MM search query text
   if (sub === 'add') {
     const timeArg = args[1];
-    const query   = args.slice(2).join(' ');
+    const query = args.slice(2).join(' ');
 
     if (!timeArg || !query)
       return bot.sendMessage(chatId,
@@ -520,7 +520,7 @@ async function handleScheduleList(bot, msg) {
       'No schedules yet.\nUse `/schedule add HH:MM [query]` to create one.',
       { parse_mode: 'Markdown' }
     );
-  const tz   = process.env.TZ || 'Europe/Warsaw';
+  const tz = process.env.TZ || 'Europe/Warsaw';
   const list = schedules
     .map((s, i) => `${i + 1}. 🕐 *${s.time}* daily — _${s.query}_`)
     .join('\n');
@@ -561,8 +561,8 @@ async function handleRun(bot, msg, args) {
 // ─── Reminders ───────────────────────────────────────────────────────────────
 
 async function handleRemind(bot, msg, args) {
-  const chatId  = msg.chat.id;
-  const userId  = msg.from.id;
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
 
   if (!args.length)
     return bot.sendMessage(chatId,
@@ -592,7 +592,7 @@ async function handleRemind(bot, msg, args) {
 
 async function handleReminders(bot, msg) {
   const chatId = msg.chat.id;
-  const list   = reminder.list(msg.from.id);
+  const list = reminder.list(msg.from.id);
   if (!list.length)
     return bot.sendMessage(chatId, 'No active reminders. Use `/remind [when] [text]` to add one.', { parse_mode: 'Markdown' });
 
@@ -636,17 +636,17 @@ async function handleExport(bot, msg) {
   const myReminders = reminders.filter(r => r.userId === userId);
 
   const payload = {
-    version:  1,
+    version: 1,
     exported: new Date().toISOString(),
-    memory:    memory.map(m => ({ fact: m.fact })),
-    notes:     notes.map(n => ({ note: n.note, ts: n.ts })),
-    todos:     todos.map(t => ({ task: t.task, done: t.done })),
+    memory: memory.map(m => ({ fact: m.fact })),
+    notes: notes.map(n => ({ note: n.note, ts: n.ts })),
+    todos: todos.map(t => ({ task: t.task, done: t.done })),
     reminders: myReminders.map(r => ({ text: r.text, fireAt: r.fireAt })),
     schedules: schedules.map(s => ({ time: s.time, query: s.query })),
-    feeds:     feeds.map(f => ({ url: f.url, label: f.label, category: f.category })),
+    feeds: feeds.map(f => ({ url: f.url, label: f.label, category: f.category })),
   };
 
-  const content  = Buffer.from(JSON.stringify(payload, null, 2), 'utf-8');
+  const content = Buffer.from(JSON.stringify(payload, null, 2), 'utf-8');
   const filename = `klawik-export-${payload.exported.slice(0, 10)}.json`;
   await bot.sendDocument(chatId, content, {
     caption: `📦 Eksport danych — ${payload.exported.slice(0, 10)}\nAby zaimportować na innym urządzeniu, wyślij ten plik botowi.`,
@@ -657,7 +657,7 @@ async function handleExport(bot, msg) {
 async function handleImportDocument(bot, msg) {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
-  const doc    = msg.document;
+  const doc = msg.document;
 
   if (!doc?.file_name?.match(/klawik-export.*\.json$/i)) return;
 
@@ -666,8 +666,8 @@ async function handleImportDocument(bot, msg) {
   let data;
   try {
     const fileInfo = await bot.getFile(doc.file_id);
-    const fileUrl  = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${fileInfo.file_path}`;
-    const res      = await axios.get(fileUrl, { timeout: 10_000 });
+    const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${fileInfo.file_path}`;
+    const res = await axios.get(fileUrl, { timeout: 10_000 });
     data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data;
   } catch (err) {
     return bot.sendMessage(chatId, `⚠️ Nie udało się wczytać pliku: ${err.message}`);
@@ -678,11 +678,11 @@ async function handleImportDocument(bot, msg) {
   }
 
   const counts = {
-    memory:    (data.memory    || []).length,
-    notes:     (data.notes     || []).length,
-    todos:     (data.todos     || []).length,
+    memory: (data.memory || []).length,
+    notes: (data.notes || []).length,
+    todos: (data.todos || []).length,
     schedules: (data.schedules || []).length,
-    feeds:     (data.feeds     || []).length,
+    feeds: (data.feeds || []).length,
   };
 
   const summary = [
@@ -700,8 +700,8 @@ async function handleImportDocument(bot, msg) {
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [[
-        { text: '✅ Importuj',  callback_data: `import_confirm:${userId}` },
-        { text: '❌ Anuluj',    callback_data: `import_cancel:${userId}`  },
+        { text: '✅ Importuj', callback_data: `import_confirm:${userId}` },
+        { text: '❌ Anuluj', callback_data: `import_cancel:${userId}` },
       ]],
     },
   });
@@ -722,11 +722,11 @@ async function executeImport(bot, userId, chatId) {
   const { data } = pending;
   let imported = 0;
 
-  for (const m of (data.memory    || [])) { if (m.fact)              { await db.addMemory(userId, m.fact);                                    imported++; } }
-  for (const n of (data.notes     || [])) { if (n.note)              { await db.addNote(userId, n.note);                                      imported++; } }
-  for (const t of (data.todos     || [])) { if (t.task)              { await db.addTodo(userId, t.task);                                      imported++; } }
-  for (const s of (data.schedules || [])) { if (s.time && s.query)   { await db.addSchedule(userId, chatId, s.query, s.time);                 imported++; } }
-  for (const f of (data.feeds     || [])) { if (f.url  && f.label)   { await db.addBriefingFeed(userId, f.url, f.label, f.category||'general'); imported++; } }
+  for (const m of (data.memory || [])) { if (m.fact) { await db.addMemory(userId, m.fact); imported++; } }
+  for (const n of (data.notes || [])) { if (n.note) { await db.addNote(userId, n.note); imported++; } }
+  for (const t of (data.todos || [])) { if (t.task) { await db.addTodo(userId, t.task); imported++; } }
+  for (const s of (data.schedules || [])) { if (s.time && s.query) { await db.addSchedule(userId, chatId, s.query, s.time); imported++; } }
+  for (const f of (data.feeds || [])) { if (f.url && f.label) { await db.addBriefingFeed(userId, f.url, f.label, f.category || 'general'); imported++; } }
 
   await bot.sendMessage(chatId,
     `✅ *Import zakończony* — dodano ${imported} elementów.`,
@@ -767,9 +767,9 @@ async function handleVoice(bot, msg) {
 
   try {
     const fileId = msg.voice.file_id;
-    const text   = await voice.transcribe(bot, fileId);
+    const text = await voice.transcribe(bot, fileId);
 
-    await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+    await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => { });
 
     if (!text) {
       return bot.sendMessage(chatId, '⚠️ Transcription returned empty. Try speaking more clearly.');
@@ -782,7 +782,7 @@ async function handleVoice(bot, msg) {
     const fakeMsgText = { ...msg, text: text };
     await handleMessage(bot, fakeMsgText);
   } catch (err) {
-    await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+    await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => { });
     await bot.sendMessage(chatId, `❌ Transcription failed: ${err.message}`);
   }
 }
@@ -790,24 +790,24 @@ async function handleVoice(bot, msg) {
 // ─── Image Analysis ───────────────────────────────────────────────────────────
 
 async function handlePhoto(bot, msg) {
-  const chatId   = msg.chat.id;
-  const userId   = msg.from.id;
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
 
   // Telegram sends multiple sizes; use the largest
-  const photos   = msg.photo;
-  const largest  = photos[photos.length - 1];
-  const fileId   = largest.file_id;
-  const caption  = msg.caption?.trim() || 'Describe this image in detail.';
+  const photos = msg.photo;
+  const largest = photos[photos.length - 1];
+  const fileId = largest.file_id;
+  const caption = msg.caption?.trim() || 'Describe this image in detail.';
 
   await bot.sendChatAction(chatId, 'upload_photo');
   const waitMsg = await bot.sendMessage(chatId, `🔍 Analyzing image with \`${vision.getActiveVisionModel()}\`...`, { parse_mode: 'Markdown' });
 
   try {
     const description = await vision.analyzeImage(bot, fileId, caption);
-    await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+    await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => { });
     await sendLong(bot, chatId, `🖼 *Image analysis:*\n\n${description}`);
   } catch (err) {
-    await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => {});
+    await bot.deleteMessage(chatId, waitMsg.message_id).catch(() => { });
     let errMsg = `❌ Vision error: ${err.message}`;
     if (err.code === 'ECONNREFUSED')
       errMsg = `❌ Vision unavailable: Ollama is not running locally.\nStart Ollama: \`ollama serve\``;
@@ -841,7 +841,7 @@ async function executeIntent(bot, msg, intent) {
       if (!url || !label) {
         await bot.sendMessage(chatId,
           t(lang, '⚠️ Could not detect URL or feed name. Try: `/briefing add <url> <label>`',
-                  '⚠️ Nie mogłem rozpoznać URL ani nazwy feeda. Spróbuj: `/briefing add <url> <label>`'),
+            '⚠️ Nie mogłem rozpoznać URL ani nazwy feeda. Spróbuj: `/briefing add <url> <label>`'),
           { parse_mode: 'Markdown' });
         return true;
       }
@@ -857,7 +857,7 @@ async function executeIntent(bot, msg, intent) {
       if (!feeds.length) {
         await bot.sendMessage(chatId,
           t(lang, '⚠️ Add an RSS feed first. E.g: "add feed https://... as myfeed category jobs"',
-                  '⚠️ Najpierw dodaj feed RSS. Np: "dodaj feed https://... jako myfeed z kategorią jobs"'));
+            '⚠️ Najpierw dodaj feed RSS. Np: "dodaj feed https://... jako myfeed z kategorią jobs"'));
         return true;
       }
       await db.setBriefingConfig(userId, { morningEnabled: true, eveningEnabled: true, chatId });
@@ -882,14 +882,14 @@ async function executeIntent(bot, msg, intent) {
       if (!time || !/^\d{1,2}:\d{2}$/.test(time)) {
         await bot.sendMessage(chatId,
           t(lang, '⚠️ Could not parse the time. Use HH:MM format, e.g. 07:30.',
-                  '⚠️ Nie rozpoznałem godziny. Podaj w formacie HH:MM, np. 07:30.'));
+            '⚠️ Nie rozpoznałem godziny. Podaj w formacie HH:MM, np. 07:30.'));
         return true;
       }
       const isMorning = type === 'briefing_time_morning';
-      const timeKey   = isMorning ? 'morningTime'    : 'eveningTime';
+      const timeKey = isMorning ? 'morningTime' : 'eveningTime';
       const enableKey = isMorning ? 'morningEnabled' : 'eveningEnabled';
-      const labelStr  = isMorning ? t(lang, 'morning', 'porannego') : t(lang, 'evening', 'wieczornego');
-      const updates   = { [timeKey]: time };
+      const labelStr = isMorning ? t(lang, 'morning', 'porannego') : t(lang, 'evening', 'wieczornego');
+      const updates = { [timeKey]: time };
       if (enable) updates[enableKey] = true;
       await db.setBriefingConfig(userId, updates);
       await bScheduler.reload(userId, chatId);
@@ -936,7 +936,7 @@ async function executeIntent(bot, msg, intent) {
       if (!feeds.length) {
         await bot.sendMessage(chatId,
           t(lang, '⚠️ No feeds configured. Add one: `/briefing add <url> <label>`',
-                  '⚠️ Brak feedów. Dodaj: `/briefing add <url> <label>`'),
+            '⚠️ Brak feedów. Dodaj: `/briefing add <url> <label>`'),
           { parse_mode: 'Markdown' });
         return true;
       }
@@ -970,7 +970,7 @@ async function executeIntent(bot, msg, intent) {
       if (!schedules.length) {
         await bot.sendMessage(chatId,
           t(lang, '_No scheduled searches._\nAdd one: `/schedule add HH:MM [query]`',
-                  '_Brak zaplanowanych wyszukiwań._\nDodaj: `/schedule add GG:MM [zapytanie]`'),
+            '_Brak zaplanowanych wyszukiwań._\nDodaj: `/schedule add GG:MM [zapytanie]`'),
           { parse_mode: 'Markdown' });
         return true;
       }
@@ -987,7 +987,7 @@ async function executeIntent(bot, msg, intent) {
       if (!time || !query || !/^\d{1,2}:\d{2}$/.test(time)) {
         await bot.sendMessage(chatId,
           t(lang, '⚠️ Could not parse time or query. Try: `/schedule add HH:MM [query]`',
-                  '⚠️ Nie rozpoznałem godziny lub zapytania. Spróbuj: `/schedule add HH:MM [zapytanie]`'),
+            '⚠️ Nie rozpoznałem godziny lub zapytania. Spróbuj: `/schedule add HH:MM [zapytanie]`'),
           { parse_mode: 'Markdown' });
         return true;
       }
@@ -1005,7 +1005,7 @@ async function executeIntent(bot, msg, intent) {
       if (!when) {
         await bot.sendMessage(chatId,
           t(lang, '⚠️ Could not parse the time. Try: "remind me in 30min about meeting"',
-                  '⚠️ Nie rozpoznałem czasu. Spróbuj: "przypomnij mi za 30min o spotkaniu"'));
+            '⚠️ Nie rozpoznałem czasu. Spróbuj: "przypomnij mi za 30min o spotkaniu"'));
         return true;
       }
       const delayMs = reminder.parseTime(when);
@@ -1016,7 +1016,7 @@ async function executeIntent(bot, msg, intent) {
         return true;
       }
       const rText = reminderText || t(lang, 'Reminder!', 'Przypomnienie!');
-      const info  = reminder.add(bot, chatId, userId, rText, delayMs);
+      const info = reminder.add(bot, chatId, userId, rText, delayMs);
       await bot.sendMessage(chatId,
         `⏰ ${t(lang, 'Reminder set!', 'Przypomnienie ustawione!')}\n📝 _${rText}_\n🕐 ${t(lang, 'In', 'Za')} *${info.inMs}*`,
         { parse_mode: 'Markdown' });
@@ -1151,7 +1151,7 @@ async function showConfirmation(bot, msg, intent, originalText = '') {
       reply_markup: {
         inline_keyboard: [[
           { text: '✅ Tak, wykonaj', callback_data: `confirm:${userId}` },
-          { text: '❌ Anuluj',       callback_data: `cancel:${userId}` },
+          { text: '❌ Anuluj', callback_data: `cancel:${userId}` },
         ]],
       },
     }
@@ -1166,7 +1166,7 @@ async function showConfirmation(bot, msg, intent, originalText = '') {
 async function handleMessage(bot, msg, { forceChat = false } = {}) {
   const userId = msg.from.id;
   const chatId = msg.chat.id;
-  const text   = msg.text?.trim();
+  const text = msg.text?.trim();
   if (!text) return;
 
   // Store chatId so scheduler can push messages even without a prior message
@@ -1258,7 +1258,7 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
       const rawResults = await search.webSearch(text);
       // Strip **double asterisks** — they render incorrectly in Telegram Markdown V1
       const results = rawResults.replace(/\*\*/g, '');
-      const lang    = routeResult.lang === 'en' ? 'English' : 'Polish';
+      const lang = routeResult.lang === 'en' ? 'English' : 'Polish';
       enriched = `[WEB SEARCH RESULTS]\n${results}\n\n` +
         `Answer the following question in ${lang}: "${text}"\n` +
         `STRICT RULES:\n` +
@@ -1272,9 +1272,9 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
     }
   }
 
-  const manualModel  = cfg.manualModel ? cfg.model : null;
-  const model        = manualModel || router.routeModel(text, null);
-  const label        = router.modelLabel(model);
+  const manualModel = cfg.manualModel ? cfg.model : null;
+  const model = manualModel || router.routeModel(text, null);
+  const label = router.modelLabel(model);
   const displayModel = llm.resolveDisplayModel(model);
 
   // ── Streaming chat with timer-based Telegram edits ───────────────────────
@@ -1284,18 +1284,18 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
   //   typingTimer — sends "typing" action every 4s so the indicator stays visible
   const TG_MAX_LEN = 4000;
 
-  let streamMsg    = null;
-  let editTimer    = null;
-  let typingTimer  = null;
-  let accumulated  = '';
-  let lastSent     = '';
+  let streamMsg = null;
+  let editTimer = null;
+  let typingTimer = null;
+  let accumulated = '';
+  let lastSent = '';
 
   try {
     streamMsg = await bot.sendMessage(chatId, `⏳ _${label}…_`, { parse_mode: 'Markdown' });
     await bot.sendChatAction(chatId, 'typing');
 
     // Keep typing indicator alive throughout generation (lasts 5s, refresh every 4s)
-    typingTimer = setInterval(() => bot.sendChatAction(chatId, 'typing').catch(() => {}), 4000);
+    typingTimer = setInterval(() => bot.sendChatAction(chatId, 'typing').catch(() => { }), 4000);
 
     editTimer = setInterval(async () => {
       if (!accumulated || accumulated === lastSent) return;
@@ -1308,33 +1308,33 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
 
     const reply = await llm.chatStream({
       userId,
-      userMessage:       enriched,
-      rawMessage:        text,
+      userMessage: enriched,
+      rawMessage: text,
       model,
-      persona:           cfg.persona,
+      persona: cfg.persona,
       customInstruction: cfg.customInstruction || null,
       onChunk: (_delta, full) => { accumulated = full; }, // sync — just update state
     });
 
     clearInterval(editTimer);
     clearInterval(typingTimer);
-    await bot.deleteMessage(chatId, streamMsg.message_id).catch(() => {});
+    await bot.deleteMessage(chatId, streamMsg.message_id).catch(() => { });
     // Strip stray CJK characters occasionally injected by some LLMs (e.g. Mistral-small)
-    const clean    = reply.replace(/[\u3000-\u9fff\uff00-\uffef\u3040-\u30ff]/g, '').replace(/\s{2,}/g, ' ').trim();
+    const clean = reply.replace(/[\u3000-\u9fff\uff00-\uffef\u3040-\u30ff]/g, '').replace(/\s{2,}/g, ' ').trim();
     const prefixed = model !== router.MODEL_SMALL ? `${label}\n\n${clean}` : clean;
     await sendLong(bot, chatId, prefixed);
   } catch (err) {
     clearInterval(editTimer);
     clearInterval(typingTimer);
     if (streamMsg) {
-      await bot.deleteMessage(chatId, streamMsg.message_id).catch(() => {});
+      await bot.deleteMessage(chatId, streamMsg.message_id).catch(() => { });
     }
 
     let errMsg = `❌ Error: ${err.message}`;
     if (err.code === 'ECONNREFUSED')
       errMsg = '❌ All providers unreachable.\n' +
-               'OpenRouter: check your API key.\n' +
-               'Ollama: run `ollama serve` to start it.';
+        'OpenRouter: check your API key.\n' +
+        'Ollama: run `ollama serve` to start it.';
     if (err.code === 'ECONNABORTED' || err.message?.includes('timeout'))
       errMsg = `⏱️ *Timeout!* Model \`${displayModel}\` did not respond within 180s.\nTry a lighter model with \`/model auto\`.`;
 
@@ -1351,16 +1351,16 @@ function register(bot) {
       if (!isAllowed(msg.from.id)) {
         return bot.sendMessage(msg.chat.id, '🚫 Unauthorized.');
       }
-      return handler(msg, match).catch(err => {
+      return typeof handler === 'function' ? handler(msg, match).catch(err => {
         console.error('[guard] unhandled error in handler:', err.message, err.stack);
-        bot.sendMessage(msg.chat.id, `❌ Unexpected error: ${err.message}`).catch(() => {});
-      });
+        bot.sendMessage(msg.chat.id, `❌ Unexpected error: ${err.message}`).catch(() => { });
+      }) : Promise.resolve();
     };
   }
 
   bot.onText(/^\/start/, guard(m => handleStart(bot, m)));
-  bot.onText(/^\/help/,  guard(m => handleHelp(bot, m)));
-  bot.onText(/^\/status/,guard(m => handleStatus(bot, m)));
+  bot.onText(/^\/help/, guard(m => handleHelp(bot, m)));
+  bot.onText(/^\/status/, guard(m => handleStatus(bot, m)));
   bot.onText(/^\/clear/, guard(m => handleClear(bot, m)));
 
   bot.onText(/^\/model(?:\s+(.+))?$/, guard((m, match) =>
@@ -1441,16 +1441,16 @@ function register(bot) {
     const data = query.data || '';
     const colonIdx = data.indexOf(':');
     if (colonIdx === -1) {
-      bot.answerCallbackQuery(query.id).catch(() => {});
+      bot.answerCallbackQuery(query.id).catch(() => { });
       return;
     }
 
-    const action       = data.slice(0, colonIdx);
+    const action = data.slice(0, colonIdx);
     const targetUserId = data.slice(colonIdx + 1);
-    const userId       = String(query.from.id);
+    const userId = String(query.from.id);
 
     if (userId !== targetUserId) {
-      bot.answerCallbackQuery(query.id, { text: 'To nie twoja akcja.' }).catch(() => {});
+      bot.answerCallbackQuery(query.id, { text: 'To nie twoja akcja.' }).catch(() => { });
       return;
     }
 
@@ -1458,10 +1458,10 @@ function register(bot) {
     if (action === 'import_confirm' || action === 'import_cancel') {
       bot.answerCallbackQuery(query.id, {
         text: action === 'import_confirm' ? '✅ Importuję…' : '❌ Anulowano.',
-      }).catch(() => {});
+      }).catch(() => { });
       bot.editMessageReplyMarkup({ inline_keyboard: [] },
         { chat_id: query.message?.chat?.id, message_id: query.message?.message_id }
-      ).catch(() => {});
+      ).catch(() => { });
       if (action === 'import_confirm') {
         await executeImport(bot, Number(userId), query.message?.chat?.id);
       } else {
@@ -1473,7 +1473,7 @@ function register(bot) {
 
     const pending = pendingIntents.get(userId);
     if (!pending) {
-      bot.answerCallbackQuery(query.id, { text: 'Akcja wygasła lub już wykonana.' }).catch(() => {});
+      bot.answerCallbackQuery(query.id, { text: 'Akcja wygasła lub już wykonana.' }).catch(() => { });
       return;
     }
 
@@ -1483,13 +1483,13 @@ function register(bot) {
     // Answer immediately — removes the loading spinner on the button
     bot.answerCallbackQuery(query.id, {
       text: action === 'confirm' ? '✅ Wykonuję…' : '❌ Anulowano.',
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Remove buttons (fire-and-forget, don't block)
     bot.editMessageReplyMarkup(
       { inline_keyboard: [] },
       { chat_id: pending.chatId, message_id: pending.msgId }
-    ).catch(() => {});
+    ).catch(() => { });
 
     try {
       if (action === 'confirm') {
@@ -1509,7 +1509,7 @@ function register(bot) {
       }
     } catch (err) {
       console.error('[callback_query] executeIntent error:', err.message);
-      bot.sendMessage(pending.chatId, '⚠️ Błąd podczas wykonywania komendy.').catch(() => {});
+      bot.sendMessage(pending.chatId, '⚠️ Błąd podczas wykonywania komendy.').catch(() => { });
     }
   });
 }
