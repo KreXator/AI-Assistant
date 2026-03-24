@@ -224,14 +224,15 @@ async function serperJobsSearch(queryOrParams, maxResults = 5) {
     // Google Jobs cards (Serper may include these)
     const jobCards = res.data.jobs || [];
     if (jobCards.length) {
+      const esc = (t) => String(t || '').replace(/[*_`[\]]/g, '\\$&');
       const lines = jobCards.slice(0, maxResults).map((j, i) => {
-        const salary = j.salary ? ` · 💸 *${j.salary}*` : '';
-        const location = j.location ? ` · 📍 ${j.location}` : '';
-        const via = j.via ? ` · ${j.via}` : '';
+        const salary = j.salary ? ` · 💸 *${esc(j.salary)}*` : '';
+        const location = j.location ? ` · 📍 ${esc(j.location)}` : '';
+        const via = j.via ? ` · ${esc(j.via)}` : '';
         const link = (j.applyOptions?.[0]?.link) || j.shareLink || '';
-        return `${i + 1}. *${j.title}*\n   🏢 ${j.companyName || ''}${salary}${location}${via}${link ? '\n   ' + link : ''}`;
+        return `${i + 1}. *${esc(j.title)}*\n   🏢 ${esc(j.companyName)}${salary}${location}${via}${link ? '\n   ' + link : ''}`;
       });
-      return `💼 *Najnowsze oferty: ${q}*\n\n${lines.join('\n\n')}`;
+      return `💼 *Najnowsze oferty: ${esc(q)}*\n\n${lines.join('\n\n')}`;
     }
 
     // Fallback: organic results

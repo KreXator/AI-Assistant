@@ -1,5 +1,22 @@
 # DEVLOG — Termux AI Assistant
 
+## 2026-03-24 — Session 7: Scheduler & Quality Fixes
+
+### Files changed
+- **`src/handlers/commands.js`** — Fixed `extractWeatherCity` regex to correctly handle locative case and strip "w " prefix.
+- **`src/scheduler/scheduler.js`** — Updated `executeQuery` to route review/digest queries to `getNewsDigest()`; added robust Markdown → Plain Text fallback to `sendLong`.
+- **`src/tools/search.js`** — Added Markdown escaping for all fields in `serperJobsSearch` results.
+
+### Key behavior changes
+- **Weather Reliability**: `/schedule add 08:30 pogoda w Zielonej Górze` now correctly identifies the city and returns weather data.
+- **Improved Digest**: Scheduler now correctly triggers the 3-category news digest (Poland, World, Tech) for "przegląd" queries.
+- **Robustness**: Fixed multiple `400 Bad Request` errors in Telegram by escaping special characters and adding an automatic plain-text retry logic for all scheduled pushes.
+
+### Commits
+- `fix: scheduler reliability — weather regex, news digest routing, and Telegram markdown escaping`
+
+
+
 ## 2026-03-24 — Session 6: Interactive Job Search Wizard
 
 ### Files changed

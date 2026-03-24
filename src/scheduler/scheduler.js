@@ -29,6 +29,11 @@ async function executeQuery(query) {
     return await weather.getWeather(weatherMatch[1].trim());
   }
   if (NEWS_RE.test(query)) {
+    // If it's a general review/digest, use the structured 3-category tool
+    const isDigest = /\b(przegląd|podsumowanie|digest|dzisiejsze|co\s+nowego)\b/i.test(query);
+    if (isDigest) {
+      return await search.getNewsDigest();
+    }
     return await search.serperNewsSearch(query, 5);
   }
   if (JOBS_RE.test(query)) {
@@ -90,9 +95,19 @@ function startTask(schedule) {
  */
 async function sendLong(chatId, text) {
   const MAX = 4000;
-  for (let i = 0; i < text.length; i += MAX) {
-    await _bot.sendMessage(chatId, text.slice(i, i + MAX), { parse_mode: 'Markdown' });
-  }
+  const send = async (chunk) => {
+    try {
+      await _bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+    } catch (err) {
+      if (err.description?.includes('parse entities') || err.message?.includes('parse entities')) {
+        await _bot.sendMessage(chatId, chunk);
+      } else {
+        throw err;
+      }
+    }
+  };
+  if (text.length <= MAX) return send(text);
+  for (let i = 0; i < text.length; i += MAX) await send(text.slice(i, i + MAX));
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────

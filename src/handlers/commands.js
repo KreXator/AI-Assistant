@@ -1161,9 +1161,12 @@ async function executeIntent(bot, msg, intent) {
 function extractWeatherCity(text) {
   const m = text.match(/(?:pogod[aeęiy]|weather)\s+(?:w\s+|in\s+|dla\s+|for\s+)?([A-ZŁŚÓŹ][a-zA-ZłśóźżćńąęĄĆĘŁŃÓŚŹŻ]+(?:\s+[A-ZŁŚÓŹ][a-zA-ZłśóźżćńąęĄĆĘŁŃÓŚŹŻ]+)?)/i);
   if (!m) return null;
+  let city = m[1].trim();
+  // Double-check: if the regex prefix group failed (optional) but city captured it, strip it
+  city = city.replace(/^(?:w|in|dla|for)\s+/i, '');
   // Reject lowercase matches (adverbs like "dzisiaj", "teraz") — city names start uppercase
-  if (!/^[A-ZŁŚÓŹ]/u.test(m[1])) return null;
-  return m[1];
+  if (!/^[A-ZŁŚÓŹ]/u.test(city)) return null;
+  return city;
 }
 
 async function showConfirmation(bot, msg, intent, originalText = '') {
