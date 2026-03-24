@@ -1351,10 +1351,15 @@ function register(bot) {
       if (!isAllowed(msg.from.id)) {
         return bot.sendMessage(msg.chat.id, '🚫 Unauthorized.');
       }
-      return typeof handler === 'function' ? handler(msg, match).catch(err => {
+      try {
+        const result = typeof handler === 'function' ? handler(msg, match) : undefined;
+        if (result && typeof result.then === 'function') {
+          await result;
+        }
+      } catch (err) {
         console.error('[guard] unhandled error in handler:', err.message, err.stack);
         bot.sendMessage(msg.chat.id, `❌ Unexpected error: ${err.message}`).catch(() => { });
-      }) : Promise.resolve();
+      }
     };
   }
 
