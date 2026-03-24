@@ -29,7 +29,10 @@ const OR_MODEL_SMALL   = process.env.OR_MODEL_SMALL   || 'google/gemma-3-4b-it:f
 const OR_MODEL_MEDIUM  = process.env.OR_MODEL_MEDIUM  || 'mistralai/mistral-small-2603';
 // GPT-4.1 mini: Intel 23, 1M ctx, strong at code + reasoning, $0.40/$1.60/M
 const OR_MODEL_LARGE   = process.env.OR_MODEL_LARGE   || 'openai/gpt-4.1-mini';
-const OR_VISION_MODEL  = process.env.OR_VISION_MODEL  || 'google/gemma-3-12b-it:free';
+// Qwen 2.5 VL: dedicated vision model (free), reliable for image analysis
+// Cascade fallback: gemini-2.0-flash-lite-001 ($0.075/$0.30/M) on 429
+const OR_VISION_MODEL         = process.env.OR_VISION_MODEL          || 'qwen/qwen-2.5-vl-7b-instruct:free';
+const OR_VISION_MODEL_FALLBACK = process.env.OR_VISION_MODEL_FALLBACK || 'google/gemini-2.0-flash-lite-001';
 
 // Best available — manually selectable via /model premium.
 // Gemini 2.5 Flash: 88.4% Global-MMLU, reasoning toggle, $0.30/$2.50/M.
@@ -197,10 +200,8 @@ async function completeStream(orModel, messages, maxTokens, onChunk) {
 async function completeVision(base64Image, prompt, mimeType = 'image/jpeg') {
   if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not set');
 
-  console.log(`[openrouter] vision model=${OR_VISION_MODEL}`);
-
-  const res = await axios.post(`${BASE_URL}/chat/completions`, {
-    model:    OR_VISION_MODEL,
+  const visionBody = (model) => ({
+    model,
     messages: [{
       role:    'user',
       content: [
@@ -208,14 +209,28 @@ async function completeVision(base64Image, prompt, mimeType = 'image/jpeg') {
         { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } },
       ],
     }],
-  }, {
-    timeout: 120_000,
-    headers: orHeaders(),
   });
 
-  const content = res.data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Empty vision response from OpenRouter');
-  return content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+  // Try primary vision model; on 429 rate-limit cascade to paid fallback
+  for (const model of [OR_VISION_MODEL, OR_VISION_MODEL_FALLBACK]) {
+    console.log(`[openrouter] vision model=${model}`);
+    try {
+      const res = await axios.post(`${BASE_URL}/chat/completions`, visionBody(model), {
+        timeout: 120_000,
+        headers: orHeaders(),
+      });
+      const content = res.data?.choices?.[0]?.message?.content;
+      if (!content) throw new Error('Empty vision response from OpenRouter');
+      return content.replace(/<think>[\s\S]*?<\/think>\s*/g, '').trim();
+    } catch (err) {
+      const status = err.response?.status;
+      if (status === 429 && model !== OR_VISION_MODEL_FALLBACK) {
+        console.warn(`[openrouter] vision 429 on ${model}, cascading to ${OR_VISION_MODEL_FALLBACK}`);
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 // ─── Embeddings ───────────────────────────────────────────────────────────────
@@ -271,6 +286,7 @@ module.exports = {
   OR_MODEL_MEDIUM,
   OR_MODEL_LARGE,
   OR_VISION_MODEL,
+  OR_VISION_MODEL_FALLBACK,
   OR_MODEL_PREMIUM,
   OR_MODEL_CODER,
 };
