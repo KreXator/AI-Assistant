@@ -54,6 +54,7 @@ Supported bot_command intents and params:
 - briefing_keywords_add {"keyword": "phrase in lowercase"}
 - briefing_keywords_remove {"keyword": "phrase in lowercase"}
 - briefing_run_now      {"type": "morning|evening"}
+- job_search            {"position": "title", "type": "B2B|UoP|dowolna", "mode": "remote|hybrid|office|dowolna"}
 - schedule_add          {"time": "HH:MM", "query": "search query string"}
 - remind                {"when": "30min|2h|45s|HH:MM", "text": "reminder message"}
 - remember              {"fact": "fact about the user in third person, Polish"}
@@ -66,6 +67,13 @@ Time normalization rules:
 - "za pół godziny" → "30min"
 - "o 7:30" → "07:30"
 - Always zero-pad hours: "7:30" → "07:30"
+
+CRITICAL — use "bot_command" / job_search for:
+- "szukam pracy", "oferty pracy", "praca dla X", "robota dla Y"
+- "znajdź mi ofertę na stanowisko Z"
+- Example: "szukam pracy jako Node.js developer na B2B zdalnie" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":"Node.js developer","type":"B2B","mode":"remote"}}
+- Example: "praca programista" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":"programista","type":"dowolna","mode":"dowolna"}}
+- Example: "szukam roboty" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":null,"type":"dowolna","mode":"dowolna"}}
 
 CRITICAL — use "bot_command" / summarize_url for:
 - Any message containing a URL (http/https) with words like "podsumuj", "streszcz", "co to jest", "przeczytaj", "sum", "summarize", "tldr" — or a bare URL with no other instruction
@@ -110,6 +118,8 @@ Examples:
 "odpal briefing" → {"type":"bot_command","intent":"briefing_run_now","lang":"pl","params":{"type":"morning"}}
 "odpal wieczorny briefing" → {"type":"bot_command","intent":"briefing_run_now","lang":"pl","params":{"type":"evening"}}
 "zaplanuj wyszukiwanie o 9:00 oferty pracy Node.js" → {"type":"bot_command","intent":"schedule_add","lang":"pl","params":{"time":"09:00","query":"oferty pracy Node.js"}}
+"szukam pracy jako Java Developer w biurze" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":"Java Developer","type":"dowolna","mode":"office"}}
+"oferty pracy zdalnej Python B2B" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":"Python","type":"B2B","mode":"remote"}}
 "zaplanuj trasę rowerową 10 km" → {"type":"chat","intent":null,"lang":"pl","params":{}}
 "zaplanuj mi dzień" → {"type":"chat","intent":null,"lang":"pl","params":{}}
 "zaplanuj wyjazd do Krakowa" → {"type":"chat","intent":null,"lang":"pl","params":{}}
@@ -167,7 +177,7 @@ const KNOWN_INTENTS = new Set([
   'briefing_time_morning', 'briefing_time_evening',
   'briefing_keywords_add', 'briefing_keywords_remove',
   'briefing_run_now', 'schedule_add', 'remind', 'remember',
-  'summarize_url', 'daily_digest',
+  'summarize_url', 'daily_digest', 'job_search',
 ]);
 
 function parse(raw) {
@@ -249,6 +259,11 @@ function precheck(text) {
   // Daily digest
   if (DAILY_DIGEST_RE.test(text)) {
     return { type: 'bot_command', intent: 'daily_digest', lang: 'pl', params: {} };
+  }
+
+  // Job search precheck (if explicitly mentioned)
+  if (/\b(szukam\s+pracy|oferty\s+pracy|szukam\s+roboty|ogłoszenia\s+o\s+pracę)\b/i.test(text)) {
+    return null; // Fall through to LLM to extract params
   }
 
   // "zapamiętaj/zapisz X" — skip news/live-data prechecks so LLM extracts remember params

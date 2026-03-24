@@ -1,5 +1,25 @@
 # DEVLOG — Termux AI Assistant
 
+## 2026-03-24 — Session 6: Interactive Job Search Wizard
+
+### Files changed
+- **`src/tools/search.js`** — Whitelisted high-quality job boards; refactored `serperJobsSearch` for structured position/type/mode parameters; added 7-day freshness filter.
+- **`src/handlers/nlRouter.js`** — Added `job_search` intent and system prompt examples for parameter extraction; added regex precheck for job keywords.
+- **`src/handlers/commands.js`** — Implemented `job_search` wizard logic (interactive dopytywanie); added `job_search` to `READ_ONLY_INTENTS`.
+
+### Key behavior changes
+- **Wizard**: Bot now intelligently prompts for missing job details (position, contract, mode) if not provided in the initial natural language request.
+- **Quality**: Results are strictly filtered to top-tier job boards (Pracuj.pl, JustJoin.it, NoFluffJobs, etc.), eliminating generic search noise.
+- **UX**: Search executes immediately once parameters are collected, bypassing confirmation dialogs.
+
+### Commits
+- `feat: interactive job search wizard with structured filtering and quality whitelisting`
+
+### Pending
+- Monitor Serper quota for job searches.
+- Refine parameter extraction for non-standard contract names.
+
+
 ## 2026-03-24 — Session 5: News Categorization & Quality
 
 ### Files changed
@@ -17,7 +37,7 @@
 - `c4227b9` — feat: categorical news skills with domain whitelisting and digest mode
 - `b4adc22` — fix: export getNewsDigest in search.js to resolve TypeError
 - `e61585c` — fix: refined news domains (removed noise) and added Tech to digest
-- `f4a2b1c` — fix: use language-appropriate tech query and improved digest fallback
+- `89c6e53` — fix: use language-appropriate tech query and improved digest fallback
 
 ### Pending
 - Monitor Serper quota (digest uses 3 calls).

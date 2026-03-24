@@ -48,7 +48,7 @@ const READ_ONLY_INTENTS = new Set([
   'list_todos', 'list_notes', 'list_reminders',
   'list_memory', 'list_schedules', 'list_feeds',
   'briefing_list_feeds', 'schedule_list',
-  'summarize_url', 'daily_digest',
+  'summarize_url', 'daily_digest', 'job_search',
 ]);
 
 /** Escape Telegram Markdown V1 special chars in user-supplied text. */
@@ -1120,6 +1120,33 @@ async function executeIntent(bot, msg, intent) {
       }
 
       await bot.sendMessage(chatId, lines.join('\n'), { parse_mode: 'Markdown' });
+      return true;
+    }
+
+    case 'job_search': {
+      const { position, type, mode } = params;
+      
+      if (!position) {
+        await bot.sendMessage(chatId, t(lang, 
+          '🔍 What position are you looking for?', 
+          '🔍 Na jakie stanowisko szukasz pracy? (np. "Node.js Developer")'));
+        return true;
+      }
+
+      // Check if we need more details (only if not already provided in NL)
+      const isRefined = (type && type !== 'dowolna') || (mode && mode !== 'dowolna');
+      // If user just sent a position without type/mode details, and it's not a detailed query, ask for refinement.
+      if (!isRefined && msg.text?.length < 40) {
+        await bot.sendMessage(chatId, t(lang,
+          `Got it! Looking for *${position}*.\n\nSpecify: contract type (B2B/UoP) and mode (remote/hybrid/office).`,
+          `Jasne! Szukamy ofert dla: *${position}*.\n\nDoprecyzuj proszę: jaki rodzaj umowy (B2B/UoP) i tryb pracy (zdalna/hybrydowa/biuro) Cię interesuje?`),
+          { parse_mode: 'Markdown' });
+        return true;
+      }
+
+      await bot.sendMessage(chatId, `💼 Szukam najlepszych ofert dla: *${position}*...`, { parse_mode: 'Markdown' });
+      const jobResults = await search.serperJobsSearch({ position, type, mode });
+      await sendLong(bot, chatId, jobResults, { parse_mode: 'Markdown', disable_web_page_preview: true });
       return true;
     }
 

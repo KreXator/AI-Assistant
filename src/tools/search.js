@@ -175,18 +175,43 @@ async function getNewsDigest(query = 'nowe wydarzenia') {
 
 // ─── Serper Jobs ──────────────────────────────────────────────────────────────
 
+const JOB_DOMAINS = [
+  'pracuj.pl', 'justjoin.it', 'nofluffjobs.com', 'linkedin.com', 'theprotocol.it', 
+  'rocketjobs.pl', 'solid.jobs', 'bulldogjob.pl', 'wellfound.com'
+];
+
 /**
- * Search job listings via Serper's /search endpoint with Polish locale.
- * Handles Google Jobs cards (`res.data.jobs`) when present, falls back to organic.
- * @param {string} query
- * @param {number} maxResults
+ * Search job listings via Serper's /search endpoint with high-quality whitelisting.
+ * @param {string|object} queryOrParams - String query or object with position, type, mode
  * @returns {Promise<string>}
  */
-async function serperJobsSearch(query, maxResults = 5) {
+async function serperJobsSearch(queryOrParams, maxResults = 5) {
   try {
+    let q = '';
+    if (typeof queryOrParams === 'string') {
+      q = queryOrParams;
+    } else {
+      const { position, type, mode } = queryOrParams;
+      const parts = [];
+      if (position) parts.push(position);
+      if (type && type !== 'dowolna') parts.push(type);
+      if (mode && mode !== 'dowolna') parts.push(mode);
+      q = parts.join(' ');
+    }
+
+    // Apply domain whitelisting: (site:A OR site:B) query
+    const whitelist = `(site:${JOB_DOMAINS.join(' OR site:')})`;
+    const finalQuery = `${whitelist} ${q}`;
+
     const res = await axios.post(
       'https://google.serper.dev/search',
-      { q: query, num: maxResults, gl: 'pl', hl: 'pl' },
+      { 
+        q: finalQuery, 
+        num: maxResults, 
+        gl: 'pl', 
+        hl: 'pl',
+        tbs: 'qdr:w' // Freshness: last week
+      },
       {
         headers: {
           'X-API-KEY': process.env.SERPER_API_KEY,
@@ -196,31 +221,31 @@ async function serperJobsSearch(query, maxResults = 5) {
       }
     );
 
-    // Google Jobs cards (Serper may include these for job queries)
+    // Google Jobs cards (Serper may include these)
     const jobCards = res.data.jobs || [];
     if (jobCards.length) {
       const lines = jobCards.slice(0, maxResults).map((j, i) => {
-        const salary = j.salary ? ` · *${j.salary}*` : '';
+        const salary = j.salary ? ` · 💸 *${j.salary}*` : '';
         const location = j.location ? ` · 📍 ${j.location}` : '';
         const via = j.via ? ` · ${j.via}` : '';
         const link = (j.applyOptions?.[0]?.link) || j.shareLink || '';
-        return `${i + 1}. *${j.title}*\n   ${j.companyName || ''}${salary}${location}${via}${link ? '\n   ' + link : ''}`;
+        return `${i + 1}. *${j.title}*\n   🏢 ${j.companyName || ''}${salary}${location}${via}${link ? '\n   ' + link : ''}`;
       });
-      return `💼 *${query}*\n\n${lines.join('\n\n')}`;
+      return `💼 *Najnowsze oferty: ${q}*\n\n${lines.join('\n\n')}`;
     }
 
-    // Fallback: organic results with job-focused formatting
+    // Fallback: organic results
     const hits = (res.data.organic || []).slice(0, maxResults);
-    if (!hits.length) return `[Brak wyników dla: "${query}"]`;
+    if (!hits.length) return `[Brak świeżych ofert dla: "${q}" (ostatnie 7 dni)]`;
 
     const lines = hits.map((r, i) => {
-      const snippet = (r.snippet || '').slice(0, 200);
+      const snippet = (r.snippet || '').slice(0, 160);
       return `${i + 1}. [${r.title}](${r.link})\n   ${snippet}`;
     });
-    return `💼 *${query}*\n\n${lines.join('\n\n')}`;
+    return `💼 *Oferty pracy: ${q}*\n\n${lines.join('\n\n')}`;
   } catch (err) {
     if (err.response?.status === 429) {
-      return `[Rate limit exceeded for Serper Jobs API. Please try again later or check your SERPER_API_KEY quota.]`;
+      return `[Rate limit exceeded for Serper Jobs API.]`;
     }
     throw err;
   }
