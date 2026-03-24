@@ -97,7 +97,7 @@ async function serperNewsSearch(query, maxResults = 5) {
     const q = cleanNewsQuery(query);
     const res = await axios.post(
       'https://google.serper.dev/news',
-      { q, num: maxResults, gl: 'pl', hl: 'pl', tbs: 'qdr:w' },  // past week
+      { q, num: maxResults, hl: 'pl', tbs: 'qdr:w' },  // past week, Polish language, global results
       {
         headers: {
           'X-API-KEY': process.env.SERPER_API_KEY,
