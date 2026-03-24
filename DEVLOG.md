@@ -14,7 +14,8 @@
 - **Freshness**: Forced 24h window (`qdr:d`) for all news tool calls.
 
 ### Commits
-- `c7a10be` — feat: categorical news skills with domain whitelisting and digest mode
+- `c4227b9` — feat: categorical news skills with domain whitelisting and digest mode
+- `a7f2d3e` — fix: export getNewsDigest in search.js to resolve TypeError
 
 ### Pending
 - Monitor Serper quota (digest uses 3 calls).

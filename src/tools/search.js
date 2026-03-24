@@ -238,4 +238,4 @@ async function webSearch(query, maxResults = 3) {
   }
 }
 
-module.exports = { webSearch, serperNewsSearch, serperJobsSearch };
+module.exports = { webSearch, serperNewsSearch, serperJobsSearch, getNewsDigest };
