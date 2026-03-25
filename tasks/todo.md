@@ -28,6 +28,11 @@
     - [ ] Obsługa wbudowanych w chat list (`todo`, `notes`)
     - [ ] Przełączanie w locie zdefiniowanych modeli `/model llama3` poprzez zmianę globalnej flagi preferencji
 
-- [ ] Dokumentacja i Verification
-    - [ ] Upewnienie się że działa w Termuxie, bez native C++
-    - [ ] Finalne testy end-to-end (manualne via Telegram aplikację)
+- [x] Dokumentacja i Verification
+    - [x] Upewnienie się że działa w Termuxie, bez native C++
+    - [x] Finalne testy end-to-end (manualne via Telegram aplikację)
+
+- [x] Funkcje Zaawansowane (Sesja 6/7)
+    - [x] Job Search Wizard (interaktywne dobieranie ofert)
+    - [x] News Digest (3-kategoryjny przegląd wiadomości)
+    - [x] Schedulery (Weather, News, Jobs) z obsługą błędów Markdown

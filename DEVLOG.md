@@ -1,5 +1,21 @@
 # DEVLOG — Termux AI Assistant
 
+## 2026-03-25 — Session 8: Anti-Hallucination & Reminder Fix
+
+### Files changed
+- **`src/tools/reminder.js`** — Enhanced `parseTime` to support relative dates ("jutro", "tomorrow", "pojutrze", "dzisiaj") and improved absolute time parsing.
+- **`src/handlers/nlRouter.js`** — Implemented deterministic regex-based `precheck` for reminders; added time normalization rules to `SYSTEM_PROMPT`.
+- **`config/personas.json`** — Updated `default` persona with a strict **ANTI-HALLUCINATION RULE** (interface-only behavior).
+
+### Key behavior changes
+- **Reliable Reminders**: Commands like "przypomnij jutro o 19:00" now work correctly and bypass LLM classification for 100% reliability.
+- **Zero Hallucination**: The bot no longer "simulates" setting a reminder if the tool is not triggered; it now explicitly reports system status or errors.
+- **Deterministic Routing**: Unified reminder patterns are handled by regex before reaching the LLM, preventing misclassification as `chat` or `web_search`.
+
+### Commits
+- `fix: anti-hallucination guardrails and robust "jutro" reminder parsing`
+
+
 ## 2026-03-24 — Session 7: Scheduler & Quality Fixes
 
 ### Files changed

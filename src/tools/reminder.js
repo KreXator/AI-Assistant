@@ -30,26 +30,60 @@ function parseTime(str) {
   if (!str) return null;
   str = str.trim();
 
-  // Xmin / Xm
-  const minMatch = str.match(/^(\d+)\s*(?:min|m)$/i);
-  if (minMatch) return parseInt(minMatch[1], 10) * 60_000;
+  const s = str.trim().toLowerCase();
 
-  // Xh
-  const hMatch = str.match(/^(\d+)\s*h$/i);
-  if (hMatch) return parseInt(hMatch[1], 10) * 3_600_000;
+  // 1. Classic relative: Xmin, Xh, Xs
+  const relNext = s.match(/^(\d+)\s*(min|m|h|s)$/i);
+  if (relNext) {
+    const val = parseInt(relNext[1]);
+    const unit = relNext[2].toLowerCase();
+    if (unit === 's') return val * 1000;
+    if (unit === 'h') return val * 60 * 60 * 1000;
+    return val * 60 * 1000; // default min
+  }
 
-  // Xs
-  const sMatch = str.match(/^(\d+)\s*s$/i);
-  if (sMatch) return parseInt(sMatch[1], 10) * 1_000;
+  // 2. Absolute / Relative Day parsing
+  // Normalize string: "jutro o 19:00" -> "jutro 19:00"
+  let clean = s.replace(/\bo\b/g, '').replace(/\s+/g, ' ');
+  
+  let targetDate = new Date();
+  let timeStr = clean;
 
-  // HH:MM — fire at a specific time today or tomorrow
-  const timeMatch = str.match(/^(\d{1,2}):(\d{2})$/);
+  const hasJutro = clean.includes('jutro') || clean.includes('tomorrow');
+  const hasPojutrze = clean.includes('pojutrze');
+  const hasDzisiaj = clean.includes('dzisiaj') || clean.includes('today');
+
+  // Day offsets
+  if (hasJutro) {
+    targetDate.setDate(targetDate.getDate() + 1);
+    timeStr = clean.replace(/jutro|tomorrow/g, '').trim();
+  } else if (hasPojutrze) {
+    targetDate.setDate(targetDate.getDate() + 2);
+    timeStr = clean.replace(/pojutrze/g, '').trim();
+  } else if (hasDzisiaj) {
+    timeStr = clean.replace(/dzisiaj|today/g, '').trim();
+  }
+
+  // Parse time part (HH:MM or HH)
+  const timeMatch = timeStr.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
   if (timeMatch) {
-    const now    = new Date();
-    const target = new Date();
-    target.setHours(parseInt(timeMatch[1], 10), parseInt(timeMatch[2], 10), 0, 0);
-    if (target <= now) target.setDate(target.getDate() + 1);
-    return target - now;
+    let hours = parseInt(timeMatch[1]);
+    const mins = parseInt(timeMatch[2] || '0');
+    const ampm = timeMatch[3] ? timeMatch[3].toLowerCase() : null;
+
+    if (ampm === 'pm' && hours < 12) hours += 12;
+    if (ampm === 'am' && hours === 12) hours = 0;
+
+    targetDate.setHours(hours, mins, 0, 0);
+
+    // If no specific day was mentioned AND the time is in the past, assume tomorrow
+    const isRelativeDayMentioned = hasJutro || hasPojutrze || hasDzisiaj;
+    if (!isRelativeDayMentioned && targetDate.getTime() < Date.now()) {
+      targetDate.setDate(targetDate.getDate() + 1);
+    }
+
+    const delay = targetDate.getTime() - Date.now();
+    return delay > 0 ? delay : null;
   }
 
   return null;

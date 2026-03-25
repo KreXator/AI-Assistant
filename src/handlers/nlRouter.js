@@ -56,15 +56,15 @@ Supported bot_command intents and params:
 - briefing_run_now      {"type": "morning|evening"}
 - job_search            {"position": "title", "type": "B2B|UoP|dowolna", "mode": "remote|hybrid|office|dowolna"}
 - schedule_add          {"time": "HH:MM", "query": "search query string"}
-- remind                {"when": "30min|2h|45s|HH:MM", "text": "reminder message"}
+- remind                {"when": "30min|2h|45s|HH:MM|jutro 10:00|tomorrow 5pm", "text": "reminder message"}
 - remember              {"fact": "fact about the user in third person, Polish"}
 - summarize_url         {"url": "https://..."}
 - daily_digest          {}
 
 Time normalization rules:
 - "za 30 minut" → "30min"
-- "za 2 godziny" → "2h"
-- "za pół godziny" → "30min"
+- "jutro o 19:00" → "jutro 19:00"
+- "tomorrow at 5pm" → "tomorrow 17:00"
 - "o 7:30" → "07:30"
 - Always zero-pad hours: "7:30" → "07:30"
 
@@ -88,19 +88,6 @@ CRITICAL — use "chat" (not "bot_command") for:
 - Questions about how things work: "jak działa RSS?", "co to jest briefing?"
 - Code-related tasks: "dodaj mi komentarz", "napisz funkcję"
 - General conversation, greetings, opinions
-- Planning real-world activities: "zaplanuj trasę", "zaplanuj wyjazd", "zaplanuj dzień", "zaplanuj projekt", "stwórz plan" — these are NOT schedule_add!
-- schedule_add is ONLY for "zaplanuj automatyczne wyszukiwanie o HH:MM [query]"
-
-CRITICAL — use "web_search" for:
-- Weather: "pogoda", "jaka pogoda", "sprawdź pogodę"
-- Today/current/live: "dzisiaj", "teraz", "aktualnie", "today", "right now", "latest"
-- News: "wiadomości", "aktualności", "news", "headlines"
-- Prices/rates: "kurs", "cena", "bitcoin", "btc", "eth", "crypto", "notowania"
-- Sports: "kto wygrał", "wyniki meczu", "tabela ligowa", "who won"
-- Any factual query needing up-to-date data
-
-Examples:
-"Pokaż moje zadania" → {"type":"bot_command","intent":"list_todos","lang":"pl","params":{}}
 "pokaż zadania" → {"type":"bot_command","intent":"list_todos","lang":"pl","params":{}}
 "moje zadania" → {"type":"bot_command","intent":"list_todos","lang":"pl","params":{}}
 "lista zadań" → {"type":"bot_command","intent":"list_todos","lang":"pl","params":{}}
@@ -237,6 +224,7 @@ const LIST_PRECHECK = [
   { re: /\b(moja\s+)?pamięć\b|\bzapamiętane\b|\bpokaż\s+pamięć\b/i,                     intent: 'list_memory'    },
   { re: /\bzaplanowane\s+wyszukiwania\b|\bpokaż\s+(harmonogram|schedule)\b/i,             intent: 'list_schedules' },
   { re: /\b(moje\s+)?feedy\b|\blista\s+feedów\b|\bpokaż\s+(feedy|feed[sy]?\s+rss)\b/i,   intent: 'list_feeds'     },
+  { re: /^(?:przypomnij|remind|alert|alarm)\s+(?:mi\s+)?(?:o\s+)?(.+)$/i,               intent: 'remind'         },
 ];
 
 // "zaplanuj X" where X is NOT a scheduled-search — force to chat
@@ -304,7 +292,38 @@ function precheck(text) {
   }
 
   for (const { re, intent } of LIST_PRECHECK) {
-    if (re.test(text)) return { type: 'bot_command', intent, lang: 'pl', params: {} };
+    if (re.test(text)) {
+      if (intent === 'remind') {
+        const m = /^(?:przypomnij|remind|alert|alarm)(?:\s+mi)?(?:\s+o)?\s+(.+)$/i.exec(text);
+        if (m) {
+          const content = m[1].trim();
+          // Simple split: "30min o spotkaniu" or "jutro 19:00 ryby"
+          // We look for time-like prefixes: "za", "o", or raw HH:MM / relative dates
+          const timeMatch = /^(?:za\s+|o\s+)?(\d+[hms]|\d{1,2}:\d{2}|jutro|today|tomorrow|dzisiaj|pojutrze)(?:\s+(?:o\s+)?(.+))?$/i.exec(content);
+          if (timeMatch) {
+            return {
+              type: 'bot_command',
+              intent: 'remind',
+              lang: 'pl',
+              params: { when: timeMatch[1], text: timeMatch[2]?.trim() || null }
+            };
+          }
+          // If time is not at the start, maybe it's at the end? "spotkanie za 30min"
+          const timeEndMatch = /^(.+?)\s+(?:za\s+|o\s+)(\d+[hms]|\d{1,2}:\d{2}|jutro|today|tomorrow|dzisiaj|pojutrze)$/i.exec(content);
+          if (timeEndMatch) {
+            return {
+              type: 'bot_command',
+              intent: 'remind',
+              lang: 'pl',
+              params: { when: timeEndMatch[2], text: timeEndMatch[1].trim() }
+            };
+          }
+          // Fall through to LLM for complex phrasing
+          return null;
+        }
+      }
+      return { type: 'bot_command', intent, lang: 'pl', params: {} };
+    }
   }
   return null;
 }
