@@ -201,7 +201,7 @@ async function handleHelp(bot, msg) {
 
 // ─── /update — pull latest version from GitHub and restart ───────────────────
 
-async function handleUpdate(bot, msg) {
+async function handleUpdate(bot, msg, lang = 'en') {
   const chatId = msg.chat.id;
   const { execFile } = require('child_process');
   const path = require('path');
@@ -215,44 +215,40 @@ async function handleUpdate(bot, msg) {
   });
 
   try {
-    // 1. Check for new commits without pulling
     await run('git', ['fetch', 'origin']);
     const localHash = await run('git', ['rev-parse', 'HEAD']);
     const remoteHash = await run('git', ['rev-parse', 'origin/main']);
 
     if (localHash === remoteHash) {
-      return bot.sendMessage(chatId, '✅ Already up to date. No update needed.');
+      return bot.sendMessage(chatId, t(lang, '✅ Already up to date.', '✅ System jest aktualny.'));
     }
 
-    // 2. Show what's incoming
     const log = await run('git', ['log', '--oneline', `HEAD..origin/main`]);
     await bot.sendMessage(chatId,
-      `🔄 *Update available!*\n\nNew commits:\n\`\`\`\n${log}\n\`\`\`\nPulling and restarting…`,
+      `🔄 *${t(lang, 'Update available!', 'Dostępna aktualizacja!')}*\n\n` +
+      `${t(lang, 'New commits:', 'Nowe zmiany:')}\n\`\`\`\n${log}\n\`\`\`\n` +
+      t(lang, 'Pulling and restarting…', 'Pobieram i restartuję…'),
       { parse_mode: 'Markdown' }
     );
 
-    // 3. Pull
     await run('git', ['pull', 'origin', 'main']);
 
-    // 4. npm install only if package.json changed
     const changed = await run('git', ['diff', 'HEAD~1', 'HEAD', '--name-only']);
     if (changed.includes('package.json')) {
-      await bot.sendMessage(chatId, '📦 package.json changed — running npm install…');
+      await bot.sendMessage(chatId, t(lang, '📦 package.json changed — running npm install…', '📦 Zmiana w package.json — instaluję zależności…'));
       await run('npm', ['install', '--omit=dev']);
     }
 
-    await bot.sendMessage(chatId, '✅ Update done. Restarting…');
-
-    // 5. Restart — rely on PM2 / nodemon / wrapper script to bring it back up
+    await bot.sendMessage(chatId, t(lang, '✅ Update done. Restarting…', '✅ Aktualizacja zakończona. Restartuję…'));
     setTimeout(() => process.exit(0), 1000);
 
   } catch (err) {
     console.error('[update] error:', err);
-    await bot.sendMessage(chatId, `❌ Update failed:\n\`${err.message}\``);
+    await bot.sendMessage(chatId, `❌ ${t(lang, 'Update failed:', 'Aktualizacja nieudana:')}\n\`${err.message}\``);
   }
 }
 
-async function handleStatus(bot, msg) {
+async function handleStatus(bot, msg, lang = 'en') {
   const userId = msg.from.id;
   const cfg = await db.getConfig(userId);
   const schedules = await db.getSchedules(userId);
@@ -262,29 +258,29 @@ async function handleStatus(bot, msg) {
   const ollamaAlive = await llm.isOllamaRunning();
 
   const orLine = orKey
-    ? `✅ configured (${orAlive ? 'online' : 'unreachable'})`
-    : '➖ not configured';
-  const ollamaLine = ollamaAlive ? '✅ running' : '❌ offline';
+    ? `✅ ${t(lang, 'configured', 'skonfigurowane')} (${orAlive ? 'online' : t(lang, 'unreachable', 'niedostępne')})`
+    : t(lang, '➖ not configured', '➖ brak konfiguracji');
+  const ollamaLine = ollamaAlive ? t(lang, '✅ running', '✅ działa') : t(lang, '❌ offline', '❌ wyłączone');
   const activeDisplay = llm.resolveDisplayModel(cfg.model);
 
   await sendLong(bot, msg.chat.id,
-    `🖥 *System Status*\n\n` +
+    `🖥 *${t(lang, 'System Status', 'Status Systemu')}*\n\n` +
     `OpenRouter: ${orLine}\n` +
-    `Ollama: ${ollamaLine} ${orKey ? '_(fallback)_' : '_(primary)_'}\n\n` +
-    `Active model: \`${activeDisplay}\` ${cfg.manualModel ? '_(manual)_' : '_(auto-routed)_'}\n` +
-    `Persona: ${cfg.persona}${cfg.customInstruction ? ' _(overridden by /instruct)_' : ''}\n` +
-    `Web search: ${searchMode}\n` +
-    `Schedules: ${schedules.length} active\n\n` +
-    `Router tiers:\n` +
+    `Ollama: ${ollamaLine} ${orKey ? `(_${t(lang, 'fallback', 'zapasowy')}_)` : `(_${t(lang, 'primary', 'główny')}_)`}\n\n` +
+    `${t(lang, 'Active model:', 'Aktywny model:')} \`${activeDisplay}\` ${cfg.manualModel ? `(_${t(lang, 'manual', 'ręczny')}_)` : `(_${t(lang, 'auto-routed', 'automatyczny')}_)`}\n` +
+    `${t(lang, 'Persona:', 'Persona:')} ${cfg.persona}${cfg.customInstruction ? ` (_${t(lang, 'overridden by /instruct', 'nadpisana przez /instruct')}_)` : ''}\n` +
+    `${t(lang, 'Web search:', 'Wyszukiwarka:')} ${searchMode}\n` +
+    `${t(lang, 'Schedules:', 'Zaplanowane:')} ${t(lang, `${schedules.length} active`, `${schedules.length} aktywne`)}\n\n` +
+    `${t(lang, 'Router tiers:', 'Tiery routera:')}\n` +
     `  💬 small=\`${llm.resolveDisplayModel(router.MODEL_SMALL)}\`\n` +
     `  ⚡ medium=\`${llm.resolveDisplayModel(router.MODEL_MEDIUM)}\`\n` +
     `  🧠 large=\`${llm.resolveDisplayModel(router.MODEL_LARGE)}\``
   );
 }
 
-async function handleClear(bot, msg) {
+async function handleClear(bot, msg, lang = 'en') {
   await db.clearHistory(msg.from.id);
-  await bot.sendMessage(msg.chat.id, '🗑 Conversation context cleared.');
+  await bot.sendMessage(msg.chat.id, t(lang, '🗑 Conversation context cleared.', '🗑 Historia rozmowy została wyczyszczona.'));
 }
 
 // ─── Model & Persona ─────────────────────────────────────────────────────────
@@ -378,26 +374,29 @@ async function handleRemember(bot, msg, args) {
   await bot.sendMessage(msg.chat.id, '✅ Noted!');
 }
 
-async function handleForget(bot, msg) {
-  await db.forgetAll(msg.from.id);
-  await bot.sendMessage(msg.chat.id, '🗑 All memories cleared.');
+async function handleForget(bot, msg, lang = 'en') {
+  await db.clearMemory(msg.from.id);
+  await bot.sendMessage(msg.chat.id, t(lang, '🧠 All remembered facts erased.', '🧠 Pamięć bota została wyczyszczona.'));
 }
 
 // ─── Notes ──────────────────────────────────────────────────────────────────
 
 async function handleNotes(bot, msg) {
+  const lang = msg.from.language_code === 'pl' ? 'pl' : 'en';
   const notes = await db.getNotes(msg.from.id);
   if (!notes.length)
-    return bot.sendMessage(msg.chat.id, 'No notes yet. Use /note [text].');
+    return bot.sendMessage(msg.chat.id, t(lang, 'No notes yet. Use /note [text].', 'Brak notatek. Użyj /note [treść].'));
   const list = notes.map((n, i) => `${i + 1}. ${n.note} _(${n.ts.slice(0, 10)})_`).join('\n');
-  await sendLong(bot, msg.chat.id, `📝 *Your notes:*\n\n${list}`);
+  await sendLong(bot, msg.chat.id, `📝 *${t(lang, 'Your notes:', 'Twoje notatki:')}*\n\n${list}`);
 }
 
 async function handleNote(bot, msg, args) {
+  const lang = msg.from.language_code === 'pl' ? 'pl' : 'en';
   if (!args.length)
-    return bot.sendMessage(msg.chat.id, 'Usage: /note [note text]');
-  await db.addNote(msg.from.id, args.join(' '));
-  await bot.sendMessage(msg.chat.id, '✅ Note saved!');
+    return bot.sendMessage(msg.chat.id, t(lang, 'Usage: /note [note text]', 'Użycie: /note [treść notatki]'));
+  const note = args.join(' ');
+  await db.addNote(msg.from.id, note);
+  await bot.sendMessage(msg.chat.id, `✅ ${t(lang, 'Note saved!', 'Notatka zapisana!')}`);
 }
 
 async function handleDelNote(bot, msg, args) {
@@ -413,20 +412,23 @@ async function handleDelNote(bot, msg, args) {
 // ─── Todos ───────────────────────────────────────────────────────────────────
 
 async function handleTodos(bot, msg) {
+  const lang = msg.from.language_code === 'pl' ? 'pl' : 'en';
   const todos = await db.getTodos(msg.from.id);
   if (!todos.length)
-    return bot.sendMessage(msg.chat.id, 'No tasks yet. Use /task [text].');
+    return bot.sendMessage(msg.chat.id, t(lang, 'No tasks yet. Use /task [text].', 'Brak zadań. Użyj /task [treść].'));
   const list = todos
     .map((t, i) => `${t.done ? '✅' : '⬜'} ${i + 1}. ${t.task}`)
     .join('\n');
-  await sendLong(bot, msg.chat.id, `📋 *Todo list:*\n\n${list}`);
+  await sendLong(bot, msg.chat.id, `📋 *${t(lang, 'Todo list:', 'Lista zadań:')}*\n\n${list}`);
 }
 
 async function handleTask(bot, msg, args) {
+  const lang = msg.from.language_code === 'pl' ? 'pl' : 'en';
   if (!args.length)
-    return bot.sendMessage(msg.chat.id, 'Usage: /task [task description]');
-  await db.addTodo(msg.from.id, args.join(' '));
-  await bot.sendMessage(msg.chat.id, '✅ Task added!');
+    return bot.sendMessage(msg.chat.id, t(lang, 'Usage: /task [task description]', 'Użycie: /task [treść zadania]'));
+  const task = args.join(' ');
+  await db.addTodo(msg.from.id, task);
+  await bot.sendMessage(msg.chat.id, `✅ ${t(lang, 'Task added!', 'Zadanie dodane!')}`);
 }
 
 async function handleDone(bot, msg, args) {
@@ -1038,6 +1040,28 @@ async function executeIntent(bot, msg, intent) {
       return true;
     }
 
+    case 'todo_add': {
+      const { task } = params;
+      if (!task) {
+        await bot.sendMessage(chatId, t(lang, '⚠️ Task text missing.', '⚠️ Brak treści zadania.'));
+        return true;
+      }
+      await db.addTodo(userId, task);
+      await bot.sendMessage(chatId, `✅ ${t(lang, 'Task added!', 'Zadanie dodane!')}`);
+      return true;
+    }
+
+    case 'note_add': {
+      const { note } = params;
+      if (!note) {
+        await bot.sendMessage(chatId, t(lang, '⚠️ Note content missing.', '⚠️ Brak treści notatki.'));
+        return true;
+      }
+      await db.addNote(userId, note);
+      await bot.sendMessage(chatId, `✅ ${t(lang, 'Note saved!', 'Notatka zapisana!')}`);
+      return true;
+    }
+
     // ─── Read-only list intents (routed by nlRouter) ─────────────────────────
     case 'list_todos':
       await handleTodos(bot, msg);
@@ -1150,6 +1174,15 @@ async function executeIntent(bot, msg, intent) {
       await sendLong(bot, chatId, jobResults, { parse_mode: 'Markdown', disable_web_page_preview: true });
       return true;
     }
+
+    case 'clear_history':
+      return handleClear(bot, msg, lang);
+
+    case 'forget_all':
+      return handleForget(bot, msg, lang);
+
+    case 'system_update':
+      return handleUpdate(bot, msg, lang);
 
     default:
       return false;

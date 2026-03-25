@@ -15,6 +15,7 @@
 const openrouter     = require('../llm/openrouter');
 const ollama         = require('../llm/ollama');
 const semanticRouter = require('../llm/semanticRouter');
+const router         = require('../agent/router');
 
 const ROUTE_TIMEOUT_MS = 8_000;
 
@@ -29,178 +30,37 @@ Routes:
 - "web_search"  — user needs live/current data: weather, today's news, stock prices, crypto rates, sports results, anything that changes over time
 - "chat"        — everything else: questions answered from training data, conversation, coding help, creative tasks, explanations, "how does X work?"
 
-Return ONLY valid JSON. No prose, no markdown, no code block.
-
-JSON schema:
-{"type": "bot_command|web_search|chat", "intent": "<intent or null>", "lang": "pl|en", "params": {}}
-
-lang: "pl" if the user wrote in Polish, "en" if in English.
-
-For "web_search" and "chat": intent must be null, params must be {}.
-For "bot_command": include the specific intent and extracted parameters.
-
-Supported bot_command intents and params:
-- list_todos            {}
-- list_notes            {}
-- list_reminders        {}
-- list_memory           {}
-- list_schedules        {}
-- list_feeds            {}
-- briefing_add_feed     {"url": "https://...", "label": "name", "category": "jobs|news|tech|general"}
-- briefing_on           {}
-- briefing_off          {}
-- briefing_time_morning {"time": "HH:MM", "enable": true|false}
-- briefing_time_evening {"time": "HH:MM", "enable": true|false}
-- briefing_keywords_add {"keyword": "phrase in lowercase"}
-- briefing_keywords_remove {"keyword": "phrase in lowercase"}
+If "bot_command", also include "intent" and "params" for the specific tool.
+KNOWN INTENTS:
+- list_todos, list_notes, list_reminders, list_memory, list_schedules, list_feeds
+- briefing_add_feed     {"url": "...", "label": "...", "category": "..."}
+- briefing_on, briefing_off
+- briefing_time_morning {"time": "HH:MM", "enable": true}
+- briefing_time_evening {"time": "HH:MM", "enable": true}
+- briefing_keywords_add {"keyword": "..."}
+- briefing_keywords_remove {"keyword": "..."}
 - briefing_run_now      {"type": "morning|evening"}
-- job_search            {"position": "title", "type": "B2B|UoP|dowolna", "mode": "remote|hybrid|office|dowolna"}
 - schedule_add          {"time": "HH:MM", "query": "search query string"}
 - remind                {"when": "30min|2h|45s|HH:MM|jutro 10:00|tomorrow 5pm", "text": "reminder message"}
 - remember              {"fact": "fact about the user in third person, Polish"}
-- summarize_url         {"url": "https://..."}
+- summarize_url         {}
 - daily_digest          {}
+- todo_add              {"task": "task description"}
+- note_add              {"note": "note content"}
+- clear_history         {}
+- forget_all            {}
+- system_update         {}
 
 Time normalization rules:
 - "za 30 minut" → "30min"
 - "jutro o 19:00" → "jutro 19:00"
-- "tomorrow at 5pm" → "tomorrow 17:00"
-- "o 7:30" → "07:30"
-- Always zero-pad hours: "7:30" → "07:30"
 
-CRITICAL — use "bot_command" / job_search for:
-- "szukam pracy", "oferty pracy", "praca dla X", "robota dla Y"
-- "znajdź mi ofertę na stanowisko Z"
-- Example: "szukam pracy jako Node.js developer na B2B zdalnie" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":"Node.js developer","type":"B2B","mode":"remote"}}
-- Example: "praca programista" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":"programista","type":"dowolna","mode":"dowolna"}}
-- Example: "szukam roboty" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":null,"type":"dowolna","mode":"dowolna"}}
+Format:
+{"type": "route_name", "intent": "intent_name", "lang": "pl|en", "params": {}}`;
 
-CRITICAL — use "bot_command" / summarize_url for:
-- Any message containing a URL (http/https) with words like "podsumuj", "streszcz", "co to jest", "przeczytaj", "sum", "summarize", "tldr" — or a bare URL with no other instruction
-- Example: "podsumuj https://example.com" → {"type":"bot_command","intent":"summarize_url","lang":"pl","params":{"url":"https://example.com"}}
-- Example: "https://example.com" → {"type":"bot_command","intent":"summarize_url","lang":"pl","params":{"url":"https://example.com"}}
+// ─── Regex Pre-checks ─────────────────────────────────────────────────────────
 
-CRITICAL — use "bot_command" / daily_digest for:
-- "co mam dziś", "plan na dziś", "mój dzień", "standup", "co dziś", "/dzisiaj"
-- Example: "co mam dziś do zrobienia?" → {"type":"bot_command","intent":"daily_digest","lang":"pl","params":{}}
-
-CRITICAL — use "chat" (not "bot_command") for:
-- Questions about how things work: "jak działa RSS?", "co to jest briefing?"
-- Code-related tasks: "dodaj mi komentarz", "napisz funkcję"
-- General conversation, greetings, opinions
-"pokaż zadania" → {"type":"bot_command","intent":"list_todos","lang":"pl","params":{}}
-"moje zadania" → {"type":"bot_command","intent":"list_todos","lang":"pl","params":{}}
-"lista zadań" → {"type":"bot_command","intent":"list_todos","lang":"pl","params":{}}
-"moje notatki" → {"type":"bot_command","intent":"list_notes","lang":"pl","params":{}}
-"lista przypomnień" → {"type":"bot_command","intent":"list_reminders","lang":"pl","params":{}}
-"zaplanowane wyszukiwania" → {"type":"bot_command","intent":"list_schedules","lang":"pl","params":{}}
-"pokaż feedy RSS" → {"type":"bot_command","intent":"list_feeds","lang":"pl","params":{}}
-"moja pamięć" → {"type":"bot_command","intent":"list_memory","lang":"pl","params":{}}
-"show my todos" → {"type":"bot_command","intent":"list_todos","lang":"en","params":{}}
-"dodaj feed https://justjoin.it/rss.xml jako justjoinit z kategorią jobs" → {"type":"bot_command","intent":"briefing_add_feed","lang":"pl","params":{"url":"https://justjoin.it/rss.xml","label":"justjoinit","category":"jobs"}}
-"włącz poranne raporty" → {"type":"bot_command","intent":"briefing_on","lang":"pl","params":{}}
-"wyłącz raporty" → {"type":"bot_command","intent":"briefing_off","lang":"pl","params":{}}
-"ustaw poranny raport na 7:30" → {"type":"bot_command","intent":"briefing_time_morning","lang":"pl","params":{"time":"07:30","enable":false}}
-"włącz poranny raport o 7:30" → {"type":"bot_command","intent":"briefing_time_morning","lang":"pl","params":{"time":"07:30","enable":true}}
-"odpal briefing" → {"type":"bot_command","intent":"briefing_run_now","lang":"pl","params":{"type":"morning"}}
-"odpal wieczorny briefing" → {"type":"bot_command","intent":"briefing_run_now","lang":"pl","params":{"type":"evening"}}
-"zaplanuj wyszukiwanie o 9:00 oferty pracy Node.js" → {"type":"bot_command","intent":"schedule_add","lang":"pl","params":{"time":"09:00","query":"oferty pracy Node.js"}}
-"szukam pracy jako Java Developer w biurze" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":"Java Developer","type":"dowolna","mode":"office"}}
-"oferty pracy zdalnej Python B2B" → {"type":"bot_command","intent":"job_search","lang":"pl","params":{"position":"Python","type":"B2B","mode":"remote"}}
-"zaplanuj trasę rowerową 10 km" → {"type":"chat","intent":null,"lang":"pl","params":{}}
-"zaplanuj mi dzień" → {"type":"chat","intent":null,"lang":"pl","params":{}}
-"zaplanuj wyjazd do Krakowa" → {"type":"chat","intent":null,"lang":"pl","params":{}}
-"przypomnij mi za 30 minut o spotkaniu" → {"type":"bot_command","intent":"remind","lang":"pl","params":{"when":"30min","text":"spotkanie"}}
-"remind me in 2 hours to send the report" → {"type":"bot_command","intent":"remind","lang":"en","params":{"when":"2h","text":"send the report"}}
-"zapamiętaj że szukam pracy zdalnej" → {"type":"bot_command","intent":"remember","lang":"pl","params":{"fact":"Szuka pracy zdalnej"}}
-"remember I prefer concise answers" → {"type":"bot_command","intent":"remember","lang":"en","params":{"fact":"Prefers concise answers"}}
-"podsumuj https://example.com/article" → {"type":"bot_command","intent":"summarize_url","lang":"pl","params":{"url":"https://example.com/article"}}
-"https://news.ycombinator.com" → {"type":"bot_command","intent":"summarize_url","lang":"pl","params":{"url":"https://news.ycombinator.com"}}
-"co mam dziś do zrobienia?" → {"type":"bot_command","intent":"daily_digest","lang":"pl","params":{}}
-"plan na dziś" → {"type":"bot_command","intent":"daily_digest","lang":"pl","params":{}}
-"sprawdź pogodę w Warszawie" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"jaka jest pogoda dzisiaj?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"kurs bitcoina" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"jakie są dzisiejsze wiadomości?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"kto wygrał mecz dziś?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"aktualny kurs EUR/PLN" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"podaj przegląd wiadomości" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"podaj wiadomości lokalne" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"co słychać w Polsce?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"najnowsze informacje" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"jaka jest teraz pogoda?" → {"type":"web_search","intent":null,"lang":"pl","params":{}}
-"Jakie masz możliwości?" → {"type":"chat","intent":null,"lang":"pl","params":{}}
-"napisz mi funkcję w Python" → {"type":"chat","intent":null,"lang":"pl","params":{}}
-"jak działa RSS?" → {"type":"chat","intent":null,"lang":"pl","params":{}}
-"co to jest briefing?" → {"type":"chat","intent":null,"lang":"pl","params":{}}`;
-
-// ─── LLM call ─────────────────────────────────────────────────────────────────
-// Use a dedicated router model — better instruction-following than general chat models.
-// Llama 3.2 3B is significantly more accurate for classification than Gemma 4B free.
-const ROUTER_MODEL = process.env.OR_MODEL_ROUTER || 'meta-llama/llama-3.2-3b-instruct:free';
-
-async function callLLM(text) {
-  const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user',   content: text },
-  ];
-  try {
-    return await openrouter.complete(ROUTER_MODEL, messages, 150);
-  } catch {
-    try {
-      return await ollama.completeRaw(process.env.MODEL_SMALL || 'qwen2.5:3b-instruct-q4_K_M', messages);
-    } catch (err2) {
-      console.warn('[nlRouter] both LLM providers failed, defaulting to web_search:', err2.message);
-      return null;
-    }
-  }
-}
-
-// ─── Parse LLM response ───────────────────────────────────────────────────────
-
-const KNOWN_INTENTS = new Set([
-  'list_todos', 'list_notes', 'list_reminders', 'list_memory', 'list_schedules', 'list_feeds',
-  'briefing_add_feed', 'briefing_on', 'briefing_off',
-  'briefing_time_morning', 'briefing_time_evening',
-  'briefing_keywords_add', 'briefing_keywords_remove',
-  'briefing_run_now', 'schedule_add', 'remind', 'remember',
-  'summarize_url', 'daily_digest', 'job_search',
-]);
-
-function parse(raw) {
-  if (!raw) return null;
-  try {
-    const cleaned = raw.replace(/```(?:json)?\s*/gi, '').replace(/```/g, '').trim();
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    const obj = JSON.parse(match[0]);
-
-    const type = obj.type;
-    if (type !== 'bot_command' && type !== 'web_search' && type !== 'chat') return null;
-
-    if (type === 'bot_command') {
-      if (!obj.intent || !KNOWN_INTENTS.has(obj.intent)) return null;
-      return {
-        type,
-        intent: obj.intent,
-        lang: obj.lang === 'en' ? 'en' : 'pl',
-        params: obj.params || {},
-      };
-    }
-
-    // web_search or chat
-    return { type, intent: null, lang: obj.lang === 'en' ? 'en' : 'pl', params: {} };
-  } catch {
-    return null;
-  }
-}
-
-// ─── Fast pre-check (deterministic, no LLM) ──────────────────────────────────
-// Handles unambiguous patterns that free models misclassify.
-// Returns a route object on match, null to proceed to LLM.
-
-// Bare or accompanied URL → summarize
-const URL_PRECHECK_RE = /https?:\/\/[^\s<>"']+/i;
+const URL_PRECHECK_RE = /https?:\/\/[^\s]+/;
 const SUMMARIZE_TRIGGER_RE = /\b(podsumuj|streszcz|streścij|summarize|tldr|przeczytaj|co tam|co pisze)\b/i;
 
 // "co mam dziś", "plan na dziś", "standup"
@@ -211,7 +71,7 @@ const DAILY_DIGEST_RE = /\b(co\s+mam\s+dzi[śs]|plan\s+na\s+dzi[śs]|m[oó]j\s+d
 // LLM models hallucinate these categories when they don't have real-time access.
 // prettier-ignore
 // Note: \b avoided after non-ASCII chars (ł, ą etc.) — use (?:\s|$) lookahead where needed
-const LIVE_DATA_RE = /\b(wiadomo[śs]ci|aktualno[śs]ci|przeg[lł][aą]d\s+wiadomo[śs]ci|skr[oó]t\s+wiadomo[śs]ci|(?:lokalne?|regionalne?)\s+wiadomo[śs]ci|wiadomo[śs]ci\s+(?:lokalne?|z\s+\w+)|headlines?|news\b|co\s+si[ęe]\s+dzieje|co\s+nowego(?:\s|$)|(?:najnowsze?|ostatnie?|aktualne?|bież[aą]ce?)\s+(?:wiadomo[śs]ci|info|doniesienia|wydarzen)|pogoda\b|prognoza\s+(?:pogody|na\s+\w+)|ile\s+stopni|kurs\s+\w+|notowania\b|gie[lł]da\b|bitcoin\b|btc\b|\beth\b|kryptowalu[tc]|cena\s+(?:benzyny|gazu|pr[aą]du|ropy|diesla)|wyniki?\s+(?:meczu?|ligi|rozgrywek)|tabela\s+\w*\s*ligi|kto\s+wygra[lł]|co\s+(?:graj[aą]|leci)(?:\s|$)|wydarzenia\s+w\b|imprezy?\s+w\b)/i;
+const LIVE_DATA_RE = /\b(pogoda\b|prognoza\s+(?:pogody|na\s+\w+)|ile\s+stopni|kurs\s+\w+|notowania\b|gie[lł]da\b|bitcoin\b|btc\b|\beth\b|kryptowalu[tc]|cena\s+(?:benzyny|gazu|pr[aą]du|ropy|diesla)|wyniki?\s+(?:meczu?|ligi|rozgrywek)|tabela\s+\w*\s*ligi|kto\s+wygra[lł]|co\s+(?:graj[aą]|leci)(?:\s|$)|wydarzenia\s+w\b|imprezy?\s+w\b)/i;
 
 // Navigation queries → web_search with special redirect to mapping apps (no LLM)
 // prettier-ignore
@@ -225,81 +85,30 @@ const LIST_PRECHECK = [
   { re: /\bzaplanowane\s+wyszukiwania\b|\bpokaż\s+(harmonogram|schedule)\b/i,             intent: 'list_schedules' },
   { re: /\b(moje\s+)?feedy\b|\blista\s+feedów\b|\bpokaż\s+(feedy|feed[sy]?\s+rss)\b/i,   intent: 'list_feeds'     },
   { re: /^(?:przypomnij|remind|alert|alarm|dodaj\s+przypomnienie|nowe\s+przypomnienie|ustaw\s+alarm|ustaw\s+przypomnienie)(?:\s+mi)?(?:\s+o)?[:\s]+\s*(.+)$/i, intent: 'remind' },
+  { re: /^(?:dodaj|zapisz|nowe|add|new)\s+(?:zadanie|task|todo)[:\s]+\s*(.+)$/i,       intent: 'todo_add'       },
+  { re: /^(?:dodaj|zapisz|nowe|add|new)\s+(?:notatkę?|note)[:\s]+\s*(.+)$/i,           intent: 'note_add'       },
+  { re: /^(?:zapamiętaj|remember|zanotuj|fact|zapisz\s+fakt)[:\s]+\s*(.+)$/i,          intent: 'remember'       },
+  { re: /\b(włącz|enable|on)\s+(briefing|raporty)\b/i,                                intent: 'briefing_on'    },
+  { re: /\b(wyłącz|disable|off)\s+(briefing|raporty)\b/i,                               intent: 'briefing_off'   },
+  {re: /\b(odpal|uruchom|run|start|generuj)\s+(?:.{0,20}\s+)?(briefing|raport)\b/i, intent: 'briefing_run_now'},
+  {re: /\b(wyczyść|usuń|clear|reset)\s+(historię|czat|history|chat)(?:\s|$)/i,     intent: 'clear_history'},
+  {re: /\b(zapomnij|forget|wyczyść|usuń)\s+(wszystko|wszystkie\s+fakty|everything)\b/i, intent: 'forget_all'},
+  { re: /\b(zaktualizuj|aktualizuj|update)\s+(system|bota|bot|kod)\b/i,                intent: 'system_update'  },
 ];
 
-// "zaplanuj X" where X is NOT a scheduled-search — force to chat
-// .{0,40} allows phrases like "sobie jutro", "nam na weekend" between "zaplanuj" and the noun
 const CHAT_OVERRIDE = /\bzaplanuj\b.{0,40}\b(trasę|wyjazd|dzień|projekt|menu|wakacje|podróż|weekend|wycieczkę|aktywność|czas|tydzień)\b/i;
-
-// "zaplanuj [coś] o HH:MM" — deterministic schedule_add detection
-// Matches: "zaplanuj wyszukiwanie o 9:00 ...", "zaplanuj codzienny przegląd o 8:30 ..."
 const SCHEDULE_ADD_RE = /\bzaplanuj\b.{0,100}\bo\s+(\d{1,2}:\d{2})\b/i;
 
 function precheck(text) {
   if (CHAT_OVERRIDE.test(text)) return { type: 'chat', intent: null, lang: 'pl', params: {} };
 
-  // URL in message → summarize (bare URL or with trigger word)
-  const urlMatch = URL_PRECHECK_RE.exec(text);
-  if (urlMatch && (SUMMARIZE_TRIGGER_RE.test(text) || text.trim().match(/^https?:\/\//i))) {
-    return { type: 'bot_command', intent: 'summarize_url', lang: 'pl', params: { url: urlMatch[0] } };
-  }
-
-  // Daily digest
-  if (DAILY_DIGEST_RE.test(text)) {
-    return { type: 'bot_command', intent: 'daily_digest', lang: 'pl', params: {} };
-  }
-
-  // Job search precheck (if explicitly mentioned)
-  if (/\b(szukam\s+pracy|oferty\s+pracy|szukam\s+roboty|ogłoszenia\s+o\s+pracę)\b/i.test(text)) {
-    return null; // Fall through to LLM to extract params
-  }
-
-  // "zapamiętaj/zapisz X" — skip news/live-data prechecks so LLM extracts remember params
-  if (/^(zapamiętaj|zapisz|zanotuj|zapamiętajmy|remember\s+that)\b/i.test(text)) return null;
-
-  // Local events queries → redirect (LLM has no local event data, always hallucinates)
-  if (/\b(wydarzen[iy]a?\s+(?:lokalne?|na\s+weekend|w\s+\w+)|co\s+(?:robi[ćc]|zwiedzi[ćc]|zobaczy[ćc])\s+(?:z\s+dzieckiem|z\s+córk|z\s+synem|w\s+\w+)|atrakcje?\s+(?:dla|w\s+\w+)|co\s+polecasz\s+(?:z\s+dzieckiem|z\s+córk|z\s+synem|w\s+\w+))\b/i.test(text)) {
-    return { type: 'web_search', intent: null, lang: 'pl', params: { subtype: 'local_events' } };
-  }
-
-  // News queries → show search results directly (LLM hallucinates entire articles)
-  // Only matches when news is the primary intent (guard above already filtered out remember commands).
-  // prettier-ignore
-  if (/\b(wiadomo[śs]ci|aktualno[śs]ci|przeg[lł][aą]d\s+wiadomo[śs]ci|skr[oó]t\s+wiadomo[śs]ci|(?:lokalne?|regionalne?|krajowe?|[śs]wiatowe?|zagraniczne?|sportowe?|technologiczne?)\s+wiadomo[śs]ci|wiadomo[śs]ci\s+(?:lokalne?|krajowe?|ze?\s+[śs]wiata?|z\s+\w+|sportowe?|technologiczne?)|headlines?|news\b|co\s+si[ęe]\s+dzieje|co\s+nowego(?:\s|$)|(?:najnowsze?|ostatnie?|aktualne?|bież[aą]ce?)\s+(?:wiadomo[śs]ci|info|doniesienia))\b/i.test(text)) {
-    return { type: 'web_search', intent: null, lang: 'pl', params: { subtype: 'news' } };
-  }
-
-  // Live/current-data queries → web_search (LLM hallucinates time-sensitive data)
-  if (LIVE_DATA_RE.test(text)) {
-    return { type: 'web_search', intent: null, lang: 'pl', params: {} };
-  }
-
-  // Navigation queries → web_search with subtype flag (LLM hallucinates local streets)
-  if (NAV_SEARCH_RE.test(text)) {
-    return { type: 'web_search', intent: null, lang: 'pl', params: { subtype: 'navigation' } };
-  }
-
-  // schedule_add: "zaplanuj ... o HH:MM" — extract time and use rest as query
-  const schedMatch = SCHEDULE_ADD_RE.exec(text);
-  if (schedMatch) {
-    const time  = schedMatch[1].padStart(5, '0');  // "8:30" → "08:30"
-    // Extract query: everything before "o HH:MM", drop "zaplanuj [mi]" prefix
-    const query = text
-      .replace(/\bzaplanuj\s+(?:mi\s+|sobie\s+)?/i, '')
-      .replace(/\s+o\s+\d{1,2}:\d{2}\b.*$/i, '')
-      .trim();
-    return { type: 'bot_command', intent: 'schedule_add', lang: 'pl', params: { time, query } };
-  }
-
+  // 1. UNIVERSAL DETERMINISTIC INTERCEPTORS (Sticky Intent)
   for (const { re, intent } of LIST_PRECHECK) {
     if (re.test(text)) {
       if (intent === 'remind') {
         const m = /^(?:przypomnij|remind|alert|alarm|dodaj\s+przypomnienie|nowe\s+przypomnienie|ustaw\s+alarm|ustaw\s+przypomnienie)(?:\s+mi)?(?:\s+o)?[:\s]+\s*(.+)$/i.exec(text);
         if (m) {
           const content = m[1].trim();
-          // Simple split: "30min o spotkaniu" or "jutro 19:00 ryby"
-          // We look for time-like prefixes: "za", "o", or raw HH:MM / relative dates
-          // Combined: "jutro 19:00", "tomorrow o 5pm"
           const timeMatch = /^(?:za\s+|o\s+|na\s+)?((?:jutro|tomorrow|today|dzisiaj|pojutrze)(?:\s+(?:o\s+)?\d{1,2}:\d{2}(?:\s*(?:am|pm))?)?|\d+[hms]|\d{1,2}:\d{2})(?:\s+(?:o\s+)?(.+))?$/i.exec(content);
           if (timeMatch) {
             return {
@@ -309,7 +118,6 @@ function precheck(text) {
               params: { when: timeMatch[1], text: timeMatch[2]?.trim() || null }
             };
           }
-          // If time is not at the start, maybe it's at the end? "spotkanie za 30min"
           const timeEndMatch = /^(.+?)\s+(?:za\s+|o\s+|na\s+)(\d+[hms]|\d{1,2}:\d{2}|jutro|today|tomorrow|dzisiaj|pojutrze)$/i.exec(content);
           if (timeEndMatch) {
             return {
@@ -319,71 +127,152 @@ function precheck(text) {
               params: { when: timeEndMatch[2], text: timeEndMatch[1].trim() }
             };
           }
-          // STICKY INTENT: Even if we can't split it perfectly via regex, 
-          // we force it to follow 'remind' path so LLM/Semantic extraction 
-          // happens within the REMIND context, not as a general query.
-          return {
-            type: 'bot_command',
-            intent: 'remind',
-            lang: 'pl',
-            params: { _raw: content } // Pass raw content for later extraction if needed
-          };
+          // 3. English "me at 5pm to call mom"
+          const enMatch = /^(?:me\s+)?at\s+((?:\d{1,2}(?::\d{2})?\s*(?:am|pm))|\d{1,2}:\d{2})\s+to\s+(.+)$/i.exec(content);
+          if (enMatch) {
+            return {
+              type: 'bot_command',
+              intent: 'remind',
+              lang: 'en',
+              params: { when: enMatch[1], text: enMatch[2].trim() }
+            };
+          }
+          return { type: 'bot_command', intent: 'remind', lang: 'pl', params: { _raw: content } };
         }
+      }
+      if (intent === 'todo_add' || intent === 'note_add' || intent === 'remember') {
+        const m = /^(?:dodaj|zapisz|nowe|add|new|zapamiętaj|remember|zanotuj|fact|zapisz\s+fakt)\s+(?:zadanie|task|todo|notatkę?|note|że|that)?[:\s]+\s*(.+)$/i.exec(text);
+        if (m) {
+          const content = m[1].trim();
+          let p = {};
+          if (intent === 'todo_add') p = { task: content };
+          else if (intent === 'note_add') p = { note: content };
+          else if (intent === 'remember') p = { fact: content };
+          return { type: 'bot_command', intent, lang: 'pl', params: p };
+        }
+      }
+      if (intent === 'briefing_run_now') {
+        const isEvening = /\b(wieczorny|evening)\b/i.test(text);
+        return { type: 'bot_command', intent, lang: 'pl', params: { type: isEvening ? 'evening' : 'morning' } };
       }
       return { type: 'bot_command', intent, lang: 'pl', params: {} };
     }
   }
+
+  // 2. OTHER SPECIAL PRECHECKS
+  const urlMatch = URL_PRECHECK_RE.exec(text);
+  if (urlMatch && (SUMMARIZE_TRIGGER_RE.test(text) || text.trim().match(/^https?:\/\//i))) {
+    return { type: 'bot_command', intent: 'summarize_url', lang: 'pl', params: { url: urlMatch[0] } };
+  }
+
+  if (DAILY_DIGEST_RE.test(text)) {
+    return { type: 'bot_command', intent: 'daily_digest', lang: 'pl', params: {} };
+  }
+
+  // Job search precheck
+  if (/\b(szukam\s+pracy|oferty\s+pracy|szukam\s+roboty|ogłoszenia\s+o\s+pracę)\b/i.test(text)) return null;
+
+  // Local events queries
+  if (/\b(wydarzen[iy]a?\s+(?:lokalne?|na\s+weekend|w\s+\w+)|co\s+(?:robi[ćc]|zwiedzi[ćc]|zobaczy[ćc])\s+(?:z\s+dzieckiem|z\s+córk|z\s+synem|w\s+\w+)|atrakcje?\s+(?:dla|w\s+\w+)|co\s+polecasz\s+(?:z\s+dzieckiem|z\s+córk|z\s+synem|w\s+\w+))\b/i.test(text)) {
+    return { type: 'web_search', intent: null, lang: 'pl', params: { subtype: 'local_events' } };
+  }
+
+  // News queries
+  if (/\b(wiadomo[śs]ci|aktualno[śs]ci|przeg[lł][aą]d\s+wiadomo[śs]ci|skr[oó]t\s+wiadomo[śs]ci|(?:lokalne?|regionalne?|krajowe?|[śs]wiatowe?|zagraniczne?|sportowe?|technologiczne?)\s+wiadomo[śs]ci|wiadomo[śs]ci\s+(?:lokalne?|krajowe?|ze?\s+[śs]wiata?|z\s+\w+|sportowe?|technologiczne?)|headlines?|news\b|co\s+si[ęe]\s+dzieje|co\s+nowego(?:\s|$))\b/i.test(text)) {
+    return { type: 'web_search', intent: null, lang: 'pl', params: { subtype: 'news' } };
+  }
+
+  if (LIVE_DATA_RE.test(text)) {
+    return { type: 'web_search', intent: null, lang: 'pl', params: {} };
+  }
+
+  if (NAV_SEARCH_RE.test(text)) {
+    return { type: 'web_search', intent: null, lang: 'pl', params: { subtype: 'navigation' } };
+  }
+
+  const schedMatch = SCHEDULE_ADD_RE.exec(text);
+  if (schedMatch) {
+    const time  = schedMatch[1].padStart(5, '0');
+    const query = text
+      .replace(/\bzaplanuj\s+(?:mi\s+|sobie\s+)?/i, '')
+      .replace(/\s+o\s+\d{1,2}:\d{2}\b.*$/i, '')
+      .trim();
+    return { type: 'bot_command', intent: 'schedule_add', lang: 'pl', params: { time, query } };
+  }
+
   return null;
+}
+
+// ─── Parse LLM response ───────────────────────────────────────────────────────
+
+const KNOWN_INTENTS = new Set([
+  'list_todos', 'list_notes', 'list_reminders', 'list_memory', 'list_schedules', 'list_feeds',
+  'briefing_add_feed', 'briefing_on', 'briefing_off',
+  'briefing_time_morning', 'briefing_time_evening',
+  'briefing_keywords_add', 'briefing_keywords_remove',
+  'briefing_run_now', 'schedule_add', 'remind', 'remember',
+  'summarize_url', 'daily_digest', 'job_search',
+  'todo_add', 'note_add', 'clear_history', 'forget_all', 'system_update',
+]);
+
+function parse(raw) {
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (parsed.type === 'bot_command' && !KNOWN_INTENTS.has(parsed.intent)) {
+      parsed.type = 'chat';
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function callLLM(text) {
+  const model = router.MODEL_SMALL;
+  const reply = await ollama.chat({
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: text },
+    ],
+    format: 'json',
+  });
+  return reply.trim();
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-// Short follow-up query signals — these alone don't tell us the topic
 const FOLLOWUP_RE = /^(co|jak|ile|czy|a\s+|i\s+|no\s+to|to\s+|ale\s+|ok\s+|okej|dobra|super|fajnie|świetnie|dzięki|i\s+co|co\s+z|co\s+jeszcze|coś\s+jeszcze|a\s+co|a\s+jak|coś\s+na|polecasz|a\s+może|może\s+coś)\b/i;
 
-/**
- * Classify a plain-text message into a routing decision.
- * Always resolves — never throws.
- * @param {string} text
- * @param {{ lastRoute?: 'web_search'|'chat'|'bot_command' }} [context]
- * @returns {Promise<{type: 'bot_command'|'web_search'|'chat', intent: string|null, lang: string, params: object}>}
- */
 async function route(text, context = {}) {
   const fast = precheck(text);
   if (fast) return fast;
 
-  // Context-aware routing: short follow-up after web_search → stay in web_search
-  // Prevents hallucination on "Co polecasz z córką?" after event/news query
   if (context.lastRoute === 'web_search' && text.length < 80 && FOLLOWUP_RE.test(text)) {
     return { type: 'web_search', intent: null, lang: 'pl', params: {} };
   }
 
-  // ── Semantic router (embedding-based, ~92% accuracy) ──────────────────────
-  // Handles web_search vs chat. bot_command always falls to LLM for param extraction.
   if (process.env.OPENROUTER_API_KEY) {
     try {
       const { route: semRoute } = await semanticRouter.classify(text);
       if (semRoute === 'web_search' || semRoute === 'chat') {
         return { type: semRoute, intent: null, lang: 'pl', params: {} };
       }
-      // null (low confidence) or 'bot_command' → fall through to LLM
     } catch (err) {
       console.warn('[nlRouter] semantic router failed, falling back to LLM:', err.message);
     }
   }
 
-  // ── LLM router fallback (bot_command param extraction + offline fallback) ──
   try {
     const raw = await Promise.race([
       callLLM(text),
       new Promise((_, rej) => setTimeout(() => rej(new Error('router timeout')), ROUTE_TIMEOUT_MS)),
     ]);
-    // If LLM router returns ambiguous/unparseable result → web_search is safer than chat
-    // (unnecessary search is harmless; hallucinating facts is not)
     return parse(raw) || { type: 'web_search', intent: null, lang: 'pl', params: {} };
   } catch {
     return { type: 'web_search', intent: null, lang: 'pl', params: {} };
   }
 }
 
-module.exports = { route };
+module.exports = { route, precheck };
