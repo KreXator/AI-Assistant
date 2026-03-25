@@ -17,6 +17,7 @@ const db = require('../db/database');
 // Map of internalId → { timeoutId, chatId, userId, text, fireAt }
 const reminders = new Map();
 let nextId = 1;
+let initialized = false;
 
 // ─── Time parsing ─────────────────────────────────────────────────────────────
 
@@ -121,13 +122,17 @@ function armReminder(bot, { id, chatId, userId, text, fireAt }) {
     }
   }, delayMs);
 
-  reminders.set(id, { timeoutId, chatId, userId, text, fireAt });
+  reminders.set(id, { id, timeoutId, chatId, userId, text, fireAt });
 }
 
 /**
  * Write current reminder state to disk (strips in-memory-only timeoutId).
  */
 function persist() {
+  if (!initialized) {
+    console.warn('[reminder] Skipped persist(): initialization not finished.');
+    return;
+  }
   db.saveReminders([...reminders.values()]).catch(err =>
     console.error('[reminder] persist failed:', err.message)
   );
@@ -137,20 +142,38 @@ function persist() {
 
 /**
  * Restore reminders from disk on bot startup. Call once with the bot instance.
- * Expired reminders are skipped automatically (filtered in loadReminders).
- * @param {TelegramBot} bot
  */
 async function init(bot) {
   const saved = await db.loadReminders();
+  const now = Date.now();
+  let missedCount = 0;
+
   for (const r of saved) {
-    armReminder(bot, r);
+    const fireAtMs = new Date(r.fireAt).getTime();
+    if (fireAtMs <= now) {
+      // Missed while offline — notify user immediately
+      try {
+        await bot.sendMessage(r.chatId, `⏰ *Missed Reminder:* ${r.text}\n_(scheduled for ${r.fireAt})_`, { parse_mode: 'Markdown' });
+        missedCount++;
+      } catch (err) {
+        console.error('[reminder] Failed to send missed notify:', err.message);
+      }
+    } else {
+      armReminder(bot, r);
+    }
   }
-  // Keep nextId above the highest restored id so there are no collisions
+
+  // Keep nextId above the highest restored id
   if (saved.length) {
-    const maxId = Math.max(...saved.map(r => r.id));
-    if (maxId >= nextId) nextId = maxId + 1;
+    const ids = saved.map(r => Number(r.id)).filter(id => !isNaN(id));
+    if (ids.length) {
+      const maxId = Math.max(...ids);
+      if (maxId >= nextId) nextId = maxId + 1;
+    }
   }
-  console.log(`[reminder] Restored ${saved.length} reminder(s) from disk.`);
+
+  initialized = true;
+  console.log(`[reminder] Init complete. Restored: ${saved.length - missedCount}, Missed: ${missedCount}`);
 }
 
 /**

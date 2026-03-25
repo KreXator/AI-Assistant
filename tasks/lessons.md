@@ -8,6 +8,21 @@ Rule:
 3. Automated push messages (schedulers) MUST have a Markdown-to-Plain-Text fallback in `sendLong` to prevent hanging on 400 Bad Request.
 4. Escape special characters (`*`, `_`, `` ` ``) at the source in search tools.
 
+# Lessons Learned — Termux AI Assistant
+
+## 2026-03-25 — Automated Headless Backups
+**[PATTERN/CRITICAL]**
+Context: Enforcing the "never touch the database manually" rule and implementing automated backups.
+Rule: 
+1. **Double Backup Strategy**: Combine event-driven backups (Git hooks `pre-commit`, `pre-push`) with time-driven backgrounds (`node-cron` daily tasks). This ensures safety from both code deployments and time-based incidents.
+2. **Environment Pathing**: Services invoked by Git hooks run from the repository root. Ensure `.env` is explicitly present in the working directory to avoid resolution issues that might occur through relative `../` traversals when scripts are run in headless modes.
+
+## 2026-03-25 — State Guard for Persistence
+ **DO**
+ Context: Implementing a persistence layer that loads from DB and saves back to DB.
+ Mistake: The `persist()` function was calling `db.saveReminders()` (which DELETE then INSERT) before `init()` (which loads from DB) had finished or if it failed. Result: Entire database wiped on first "add" operation if initialization was incomplete.
+ Rule: Always implement an `initialized` or `loading` flag for in-memory stores that sync to DB. Prevent any writes until the initial load is successfully completed.
+ 
 ## [2026-03-25] — System Hardening & Async Safety
 **[CRITICAL/PATTERN]**
 Context: Preventing bot crashes from third-party library errors (libsql/hrana).

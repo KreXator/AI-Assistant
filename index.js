@@ -25,6 +25,7 @@ const commands    = require('./src/handlers/commands');
 const scheduler          = require('./src/scheduler/scheduler');
 const reminder           = require('./src/tools/reminder');
 const briefingScheduler  = require('./src/scheduler/briefingScheduler');
+const backupScheduler    = require('./src/scheduler/backupScheduler');
 const db             = require('./src/db/database');
 const lock           = require('./src/db/instanceLock');
 const semanticRouter = require('./src/llm/semanticRouter');
@@ -54,6 +55,7 @@ async function startBot(bot) {
   await scheduler.init(bot);
   await reminder.init(bot);
   await briefingScheduler.init(bot);
+  backupScheduler.init();
 
   // Preload semantic router embeddings in background (avoids cold start on first message)
   if (process.env.OPENROUTER_API_KEY) {

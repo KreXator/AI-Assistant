@@ -1,5 +1,29 @@
 # DEVLOG — Termux AI Assistant
 
+## 2026-03-25 — Session 11: Automated Database Backups
+- **Files changed**:
+  - `scripts/backup_db.js` (NEW) — Headless Turso JSON export.
+  - `src/scheduler/backupScheduler.js` (NEW) — Daily cron job trigger (03:00 AM).
+  - `package.json` — Added custom `npm run backup` instruction.
+  - `.git/hooks/pre-commit` & `.git/hooks/pre-push` (NEW) — Git lifecycle hooks.
+  - `.env` & `index.js` — Boot sequence injection and pathing logic updates.
+- **Key behavior changes**:
+  - **Data Protection**: Database tables are now backed up on code changes via Git hooks.
+  - **Time Protection**: Scheduled daily backups run identically in a decoupled thread.
+  - **Auto Removal**: Backups maintain a hard limit of 10 latest files to prevent size bloat.
+
+
+ 
+ ## 2026-03-25 — Session 10: Reminder Persistence & Data Safety
+ - **Files changed**:
+   - `src/tools/reminder.js` — Added `initialized` state guard to `persist()`; implemented catch-up notifications for missed reminders.
+   - `src/db/database.js` — Removed `fire_at` filter in `loadReminders`; standardized string ID storage in `saveReminders`.
+ - **Key behavior changes**:
+   - **Data Protection**: Wiping the `reminders` table on failed initialization is now impossible.
+   - **Catch-up Notifications**: Users are now notified immediately upon bot startup if any reminders were scheduled to fire during downtime.
+   - **Reliability**: Persistence logic is now robust against race conditions and database transient failures.
+ 
+
 ## 2026-03-25 — Session 9: System Hardening & Stability
 - **Files changed**:
   - `src/db/database.js` — Wrapped all 30+ database interaction functions in `try/catch` blocks to prevent fatal process crashes from `libsql` library errors.

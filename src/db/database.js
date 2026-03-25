@@ -435,11 +435,9 @@ async function getAllSchedules() {
 
 async function loadReminders() {
   try {
-    const now = new Date().toISOString();
-    const r = await turso.execute({
-      sql:  'SELECT id, chat_id, user_id, text, fire_at FROM reminders WHERE fire_at > ?',
-      args: [now],
-    });
+    const r = await turso.execute(
+      'SELECT id, chat_id, user_id, text, fire_at FROM reminders'
+    );
     return r.rows.map(row => ({
       id:     row[0],
       chatId: Number(row[1]),
@@ -459,7 +457,7 @@ async function saveReminders(list) {
       { sql: 'DELETE FROM reminders' },
       ...list.map(r => ({
         sql:  'INSERT INTO reminders (id, chat_id, user_id, text, fire_at) VALUES (?, ?, ?, ?, ?)',
-        args: [r.id, String(r.chatId), String(r.userId), r.text, r.fireAt],
+        args: [String(r.id), String(r.chatId), String(r.userId), r.text, r.fireAt],
       })),
     ];
     await turso.batch(stmts, 'write');
