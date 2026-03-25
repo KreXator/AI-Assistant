@@ -8,6 +8,17 @@ require('dotenv').config();
 
 const os          = require('os');
 const TelegramBot = require('node-telegram-bot-api');
+
+// Global safety net for async errors that bypass try/catch (e.g. inside libraries)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ [FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Keep the process alive
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('⚠️ [FATAL] Uncaught Exception:', err.message, err.stack);
+  // Keep the process alive but log clearly
+});
 const ollama      = require('./src/llm/ollama');
 const openrouter  = require('./src/llm/openrouter');
 const commands    = require('./src/handlers/commands');

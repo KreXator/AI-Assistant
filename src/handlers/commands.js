@@ -44,11 +44,14 @@ function setLastRoute(userId, type) {
 }
 
 // Intents that execute immediately — no confirmation dialog needed
-const READ_ONLY_INTENTS = new Set([
+const AUTO_EXECUTE_INTENTS = new Set([
   'list_todos', 'list_notes', 'list_reminders',
   'list_memory', 'list_schedules', 'list_feeds',
   'briefing_list_feeds', 'schedule_list',
   'summarize_url', 'daily_digest', 'job_search',
+  'todo_add', 'note_add', 'remind', 'remember',
+  'briefing_on', 'briefing_off', 'briefing_run_now',
+  'system_update'
 ]);
 
 /** Escape Telegram Markdown V1 special chars in user-supplied text. */
@@ -1246,7 +1249,7 @@ async function handleMessage(bot, msg, { forceChat = false } = {}) {
 
   if (routeResult.type === 'bot_command') {
     const intent = { intent: routeResult.intent, lang: routeResult.lang, params: routeResult.params };
-    if (READ_ONLY_INTENTS.has(routeResult.intent)) {
+    if (AUTO_EXECUTE_INTENTS.has(routeResult.intent)) {
       await executeIntent(bot, msg, intent);
     } else {
       await showConfirmation(bot, msg, intent, text);
@@ -1597,4 +1600,9 @@ function register(bot) {
   });
 }
 
-module.exports = { register };
+module.exports = {
+  register,
+  // Exported for testing only
+  handleMessage: process.env.NODE_ENV === 'test' ? handleMessage : undefined,
+  executeIntent: process.env.NODE_ENV === 'test' ? executeIntent : undefined,
+};

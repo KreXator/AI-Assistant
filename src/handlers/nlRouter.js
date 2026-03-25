@@ -78,22 +78,29 @@ const LIVE_DATA_RE = /\b(pogoda\b|prognoza\s+(?:pogody|na\s+\w+)|ile\s+stopni|ku
 const NAV_SEARCH_RE = /\b(jak\s+(?:dojecha[ćc]|dojad[ęe]|dotrze[ćc]|doj[śs][ćc])|drog[ęa]\s+powrotn|trasa?\s+rowerow|trasa?\s+(?:piesz|samochodow)|(?:wymyśl|zaproponuj|poka[zż]|podaj|polecasz?|pole[ćc])\s+.{0,40}tras[ęea]?|jak[aą]\s+tras[ęea]|(?:lekk[aą]|ciekaw[aą]|fajna?|krótk[aą]|ładn[aą])\s+tras[ęea]|tras[ęea]\s+.{0,30}(?:polecasz?|zaproponuj|wymyśl|pole[ćc])|wycieczk[ięa]\s+rowerow)/i;
 
 const LIST_PRECHECK = [
-  { re: /\b(moje\s+)?notatki\b|\blista\s+notatek\b|\bpokaż\s+notatki\b/i,                intent: 'list_notes'     },
-  { re: /\b(moje\s+)?zadania\b|\blista\s+zadań\b|\bpokaż\s+zadania\b|\btodos\b/i,        intent: 'list_todos'     },
-  { re: /\b(moje\s+)?przypomnienia\b|\blista\s+przypomnień\b|\bpokaż\s+przypomnienia\b/i, intent: 'list_reminders' },
-  { re: /\b(moja\s+)?pamięć\b|\bzapamiętane\b|\bpokaż\s+pamięć\b/i,                     intent: 'list_memory'    },
-  { re: /\bzaplanowane\s+wyszukiwania\b|\bpokaż\s+(harmonogram|schedule)\b/i,             intent: 'list_schedules' },
-  { re: /\b(moje\s+)?feedy\b|\blista\s+feedów\b|\bpokaż\s+(feedy|feed[sy]?\s+rss)\b/i,   intent: 'list_feeds'     },
+  // 1. Additions (Specific content patterns)
   { re: /^(?:przypomnij|remind|alert|alarm|dodaj\s+przypomnienie|nowe\s+przypomnienie|ustaw\s+alarm|ustaw\s+przypomnienie)(?:\s+mi)?(?:\s+o)?[:\s]+\s*(.+)$/i, intent: 'remind' },
-  { re: /^(?:dodaj|zapisz|nowe|add|new)\s+(?:zadanie|task|todo)[:\s]+\s*(.+)$/i,       intent: 'todo_add'       },
-  { re: /^(?:dodaj|zapisz|nowe|add|new)\s+(?:notatkę?|note)[:\s]+\s*(.+)$/i,           intent: 'note_add'       },
+  { re: /^(?:dodaj|zapisz|nowe|nowa|nową|add|new)\s+(?:zadanie|task|todo)[:\s]+\s*(.+)$/i,       intent: 'todo_add'       },
+  { re: /^(?:dodaj|zapisz|nowe|nowa|nową|add|new)\s+(?:notatk[aęę]?|note)[:\s]+\s*(.+)$/i,           intent: 'note_add'       },
   { re: /^(?:zapamiętaj|remember|zanotuj|fact|zapisz\s+fakt)[:\s]+\s*(.+)$/i,          intent: 'remember'       },
-  { re: /\b(włącz|enable|on)\s+(briefing|raporty)\b/i,                                intent: 'briefing_on'    },
-  { re: /\b(wyłącz|disable|off)\s+(briefing|raporty)\b/i,                               intent: 'briefing_off'   },
-  {re: /\b(odpal|uruchom|run|start|generuj)\s+(?:.{0,20}\s+)?(briefing|raport)\b/i, intent: 'briefing_run_now'},
-  {re: /\b(wyczyść|usuń|clear|reset)\s+(historię|czat|history|chat)(?:\s|$)/i,     intent: 'clear_history'},
-  {re: /\b(zapomnij|forget|wyczyść|usuń)\s+(wszystko|wszystkie\s+fakty|everything)\b/i, intent: 'forget_all'},
-  { re: /\b(zaktualizuj|aktualizuj|update)\s+(system|bota|bot|kod)\b/i,                intent: 'system_update'  },
+
+  // 2. State toggles
+  { re: /(?:^|\s)(włącz|enable|on)\s+(briefing|raporty)(?:\s|$)/i,                                intent: 'briefing_on'    },
+  { re: /(?:^|\s)(wyłącz|disable|off)\s+(briefing|raporty)(?:\s|$)/i,                               intent: 'briefing_off'   },
+  { re: /(?:^|\s)(odpal|uruchom|run|start|generuj)\s+(?:.{0,20}\s+)?(briefing|raport)(?:\s|$)/i, intent: 'briefing_run_now'},
+  
+  // 3. Lists (General requests)
+  { re: /(?:^|\s)(?:moje\s+)?notatki(?:\s|$)|(?:^|\s)list[aeyę]\s+notatek(?:\s|$)|(?:^|\s)pokaż\s+notatki(?:\s|$)|(?:^|\s)notatkę(?:\s|$)|(?:^|\s)notes(?:\s|$)/i,        intent: 'list_notes'     },
+  { re: /(?:^|\s)(?:moje\s+)?zadania(?:\s|$)|(?:^|\s)list[aeyę]\s+zadań(?:\s|$)|(?:^|\s)pokaż\s+zadania(?:\s|$)|(?:^|\s)todos?\b|(?:^|\s)taski(?:\s|$)/i,  intent: 'list_todos'     },
+  { re: /(?:^|\s)(?:moje\s+)?przypomnienia(?:\s|$)|(?:^|\s)list[aeyę]\s+przypomnień(?:\s|$)|(?:^|\s)pokaż\s+przypomnienia(?:\s|$)/i, intent: 'list_reminders' },
+  { re: /(?:^|\s)(?:moja\s+)?pamięć(?:\s|$)|(?:^|\s)zapamiętane(?:\s|$)|(?:^|\s)pokaż\s+pamięć(?:\s|$)/i,                     intent: 'list_memory'    },
+  { re: /(?:^|\s)zaplanowane\s+wyszukiwania(?:\s|$)|(?:^|\s)pokaż\s+(harmonogram|schedule)(?:\s|$)/i,             intent: 'list_schedules' },
+  { re: /(?:^|\s)(?:moje\s+)?feedy(?:\s|$)|(?:^|\s)list[aeyę]\s+(?:feedów|rss)(?:\s|$)|(?:^|\s)pokaż\s+(feedy|feed[sy]?\s+rss)(?:\s|$)/i,   intent: 'list_feeds'     },
+
+  // 4. Utility
+  { re: /(?:^|\s)(wyczyść|usuń|clear|reset)\s+(historię|czat|history|chat)(?:\s|$)/i,     intent: 'clear_history'},
+  { re: /(?:^|\s)(zapomnij|forget|wyczyść|usuń)\s+(wszystko|wszystkie\s+fakty|everything)(?:\s|$)/i, intent: 'forget_all'},
+  { re: /(?:^|\s)(zaktualizuj|aktualizuj|update)\s+(system|bota|bot|kod)(?:\s|$)/i,                intent: 'system_update'  },
 ];
 
 const CHAT_OVERRIDE = /\bzaplanuj\b.{0,40}\b(trasę|wyjazd|dzień|projekt|menu|wakacje|podróż|weekend|wycieczkę|aktywność|czas|tydzień)\b/i;
@@ -141,7 +148,7 @@ function precheck(text) {
         }
       }
       if (intent === 'todo_add' || intent === 'note_add' || intent === 'remember') {
-        const m = /^(?:dodaj|zapisz|nowe|add|new|zapamiętaj|remember|zanotuj|fact|zapisz\s+fakt)\s+(?:zadanie|task|todo|notatkę?|note|że|that)?[:\s]+\s*(.+)$/i.exec(text);
+        const m = /^(?:dodaj|zapisz|nowe|nowa|nową|add|new|zapamiętaj|remember|zanotuj|fact|zapisz\s+fakt)\s+(?:zadanie|task|todo|notatk[aęę]?|note|że|that)?[:\s]+\s*(.+)$/i.exec(text);
         if (m) {
           const content = m[1].trim();
           let p = {};
@@ -230,15 +237,11 @@ function parse(raw) {
 
 async function callLLM(text) {
   const model = router.MODEL_SMALL;
-  const reply = await ollama.chat({
-    model,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: text },
-    ],
-    format: 'json',
-  });
-  return reply.trim();
+  const raw = await ollama.completeRaw(model, [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: text },
+  ]);
+  return raw.trim();
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────

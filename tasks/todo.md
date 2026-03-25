@@ -36,3 +36,10 @@
     - [x] Job Search Wizard (interaktywne dobieranie ofert)
     - [x] News Digest (3-kategoryjny przegląd wiadomości)
     - [x] Schedulery (Weather, News, Jobs) z obsługą błędów Markdown
+
+- [x] Hardening i Stabilizacja (Sesja 9)
+    - [x] Implementacja 30+ error boundaries w warstwie DB (`database.js`)
+    - [x] Globalny safety net (`unhandledRejection`, `uncaughtException`) w `index.js`
+    - [x] Refaktoryzacja regexów NL dla wsparcia polskich odmian
+    - [x] Utworzenie testu reprodukcji crashu (`repro_crash.js`)
+    - [x] Rozszerzenie testów NL do 58 wariantów (`nl_routing_test.js`)

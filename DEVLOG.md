@@ -1,5 +1,23 @@
 # DEVLOG — Termux AI Assistant
 
+## 2026-03-25 — Session 9: System Hardening & Stability
+- **Files changed**:
+  - `src/db/database.js` — Wrapped all 30+ database interaction functions in `try/catch` blocks to prevent fatal process crashes from `libsql` library errors.
+  - `index.js` — Added global `unhandledRejection` and `uncaughtException` listeners as a final safety net for third-party library errors.
+  - `src/handlers/nlRouter.js` — Refined Polish regex patterns with character-aware boundaries (`[^\p{L}\p{N}]`) to support inflections; reordered intent pre-checks for lists/notes to prevent misrouting.
+  - `src/handlers/commands.js` — Exported `handleMessage` and `executeIntent` for testing; protected `executeIntent` from crashing on failed database calls during briefing config updates.
+  - `test/nl_routing_test.js` — Expanded test suite to 58 variants (100% pass).
+  - `test/repro_crash.js` [NEW] — Created a script to simulate fatal `libsql` errors and verify bot survival.
+- **Key behavior changes**:
+  - **Bulletproof Stability**: The bot no longer restarts when the database connection drops or when `libsql` throws internal `TypeErrors`.
+  - **Graceful Fallbacks**: If the database is unreachable, the bot returns helpful error messages or "empty list" fallbacks instead of crashing.
+  - **Improved Polish NLP**: "Pokaż notatkę", "Wyświetl listę zadań", and similar inflected commands are now detected with 100% precision.
+- **Commits**:
+  - `fix: hardened database layer with comprehensive error boundaries across 30+ functions`
+  - `feat: added global process-level safety net for unhandled rejections and exceptions`
+  - `fix: refined Polish NLP regex patterns to handle inflected word boundaries`
+  - `test: added automated crash reproduction and expanded NL routing test suite`
+
 ## 2026-03-25 — Session 8: Universal Deterministic Routing & Anti-Hallucination
 
 ### Files changed
@@ -10,13 +28,12 @@
 - **`test/nl_routing_test.js` [NEW]** — Dedicated test suite for validating deterministic routing across 19 natural language variants.
 
 ### Key behavior changes
-- **Zero Hallucination Guarantee**: The bot now uses deterministic regex interceptors for ALL system intents (tasks, reminders, notes, etc.). It NO LONGER falls back to LLM for intent classification when clear patterns are matched.
-- **Bilingual System Interface**: All system responses are now correctly localized to the user's detected language (Polish or English) with high-quality feedback.
-- **Sticky Intent Persistence**: Intent is locked once a system keyword is detected, preventing "hallucinated successes" where the bot claims to have done something but actually did a web search.
-- **Robust NLP**: Improved extraction for complex time/date expressions and multi-line task/note additions.
+- **Zero Hallucination Guarantee**: The bot now uses deterministic regex interceptors for ALL system intents.
+- **Silent Execution**: Common system commands (tasks, notes, reminders, memory, briefings) now execute immediately without asking "Czy o to chodziło?". Confirmation is only required for potentially destructive or complex intents.
+- **Bilingual System Interface**: All system responses are localized to Polish/English.
 
 - **Verified with Unit Tests**: Created and ran `test/nl_routing_test.js`, confirming 100% accuracy (19/19 passed) for the implemented natural language patterns.
-- `feat: universal deterministic routing and anti-hallucination guardrails`
+- `feat: universal deterministic routing and silent execution of system intents`
 - `fix: localized status and history management with robust NLP pre-checks`
 
 

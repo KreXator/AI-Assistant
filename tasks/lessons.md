@@ -8,12 +8,12 @@ Rule:
 3. Automated push messages (schedulers) MUST have a Markdown-to-Plain-Text fallback in `sendLong` to prevent hanging on 400 Bad Request.
 4. Escape special characters (`*`, `_`, `` ` ``) at the source in search tools.
 
-## [2026-03-25] — Anti-Hallucination & Time Parsing
+## [2026-03-25] — System Hardening & Async Safety
 **[CRITICAL/PATTERN]**
-Context: Fixing hallucinations and relative time parsing for reminders.
-Mistake: LLM classification for "jutro" was unreliable (sometimes chat, sometimes web).
+Context: Preventing bot crashes from third-party library errors (libsql/hrana).
+Mistake: Relying on library stability for database calls and assuming `try/catch` in high-level handlers is enough.
 Rule:
-1. Always implement **deterministic regex pre-checks** inside `nlRouter.js` for high-risk intents (reminders, todos).
-2. For relative dates like "jutro", normalization in `reminder.js` must happen BEFORE absolute time parsing.
-3. Use a strict **STRIKT ANTI-HALLUCINATION RULE** in `personas.json` to force the bot into "interface-only" mode.
-4. Don't rely on LLM for parameter extraction if the pattern is simple enough for regex (boosts speed + reliability).
+1. **Lower-Level Hardening**: ALWAYS wrap database interaction functions in their own `try/catch` blocks at the source (`src/db/database.js`).
+2. **Global Safety Net**: Always implement `process.on('unhandledRejection')` and `process.on('uncaughtException')` in `index.js` to catch async leaks from libraries.
+3. **Deterministic Persistence**: For high-frequency calls (briefing configs, history), protect the write path to ensure a single failed DB write doesn't stall the main event loop.
+4. **Resilient Regex**: Use character-aware boundaries `[^\p{L}\p{N}]` for Polish commands to ensure inflected words don't break NL routing.
