@@ -42,6 +42,7 @@ KNOWN INTENTS:
 - briefing_run_now      {"type": "morning|evening"}
 - schedule_add          {"time": "HH:MM", "query": "search query string"}
 - remind                {"when": "30min|2h|45s|HH:MM|jutro 10:00|tomorrow 5pm", "text": "reminder message"}
+- remind_daily          {"when": "HH:MM", "text": "reminder message"}
 - remember              {"fact": "fact about the user in third person, Polish"}
 - summarize_url         {}
 - daily_digest          {}
@@ -79,7 +80,7 @@ const NAV_SEARCH_RE = /\b(jak\s+(?:dojecha[ćc]|dojad[ęe]|dotrze[ćc]|doj[śs][
 
 const LIST_PRECHECK = [
   // 1. Additions (Specific content patterns)
-  { re: /^(?:przypomnij|remind|alert|alarm|dodaj\s+przypomnienie|nowe\s+przypomnienie|ustaw\s+alarm|ustaw\s+przypomnienie)(?:\s+mi)?(?:\s+o)?[:\s]+\s*(.+)$/i, intent: 'remind' },
+  { re: /^(?:przypomnij|remind|alert|alarm|(?:dodaj|nowe|nowa|nową|ustaw)\s+(?:\w+\s+)?(?:alarm|przypomnienie))(?:\s+mi)?(?:\s+o)?[:\s]+\s*([\s\S]+)$/i, intent: 'remind' },
   { re: /^(?:dodaj|zapisz|nowe|nowa|nową|add|new)\s+(?:zadani[ae]|tasks?|todos?)[:\s]+\s*([\s\S]+)$/i,       intent: 'todo_add'       },
   { re: /^(?:dodaj|zapisz|nowe|nowa|nową|add|new)\s+(?:notatk[aęę]?|note)[:\s]+\s*([\s\S]+)$/i,           intent: 'note_add'       },
   { re: /^(?:zapamiętaj|remember|zanotuj|fact|zapisz\s+fakt)[:\s]+\s*(.+)$/i,          intent: 'remember'       },
@@ -142,16 +143,33 @@ function precheck(text) {
   for (const { re, intent } of LIST_PRECHECK) {
     if (re.test(text)) {
       if (intent === 'remind') {
-        const m = /^(?:przypomnij|remind|alert|alarm|dodaj\s+przypomnienie|nowe\s+przypomnienie|ustaw\s+alarm|ustaw\s+przypomnienie)(?:\s+mi)?(?:\s+o)?[:\s]+\s*([\s\S]+)$/i.exec(text);
+        // Check if the user wants a DAILY reminder (codziennie/codzienne)
+        const isDaily = /\bcodzien(?:nie|n[aey]?)\b|\beveryday\b|\bevery\s+day\b/i.test(text);
+
+        const m = /^(?:przypomnij|remind|alert|alarm|(?:dodaj|nowe|nowa|nową|ustaw)\s+(?:\w+\s+)?(?:alarm|przypomnienie))(?:\s+mi)?(?:\s+o)?[:\s]+\s*([\s\S]+)$/i.exec(text);
         if (m) {
           // Normalize Polish ordinal hours → HH:MM before regex matching
           const content = normalizeOrdinalTime(m[1].trim());
           // Also handle DD.MM.YYYY / DD.MM date formats
           const timeMatch = /^(?:za\s+|o\s+|na\s+)?((?:jutro|tomorrow|today|dzisiaj|pojutrze)(?:\s+(?:o\s+)?(?:\d{1,2}:\d{2}|\d{1,2}\.\d{2}(?:\.\d{4})?)(?:\s*(?:am|pm))?)?|\d+[hms]|\d{1,2}:\d{2}|\d{1,2}\.\d{2}(?:\.\d{4})?)(?:\s+(?:o\s+)?(.+))?$/i.exec(content);
+          const resolvedIntent = isDaily ? 'remind_daily' : 'remind';
+          // For daily reminders, strip the frequency word before time extraction
+          const contentForTime = isDaily
+            ? content.replace(/\bcodzien(?:nie|n[aey]?)\b/gi, '').replace(/\s+/g, ' ').trim()
+            : content;
+          const timeMatchOn = /^(?:za\s+|o\s+|na\s+)?((?:jutro|tomorrow|today|dzisiaj|pojutrze)(?:\s+(?:o\s+)?(?:\d{1,2}:\d{2}|\d{1,2}\.\d{2}(?:\.\d{4})?)(?:\s*(?:am|pm))?)?|\d+[hms]|\d{1,2}:\d{2}|\d{1,2}\.\d{2}(?:\.\d{4})?)(?:\s+(?:o\s+)?(.+))?$/i.exec(contentForTime);
+          if (timeMatchOn) {
+            return {
+              type: 'bot_command',
+              intent: resolvedIntent,
+              lang: 'pl',
+              params: { when: timeMatchOn[1], text: timeMatchOn[2]?.trim() || null }
+            };
+          }
           if (timeMatch) {
             return {
               type: 'bot_command',
-              intent: 'remind',
+              intent: resolvedIntent,
               lang: 'pl',
               params: { when: timeMatch[1], text: timeMatch[2]?.trim() || null }
             };
@@ -160,7 +178,7 @@ function precheck(text) {
           if (timeEndMatch) {
             return {
               type: 'bot_command',
-              intent: 'remind',
+              intent: resolvedIntent,
               lang: 'pl',
               params: { when: timeEndMatch[2], text: timeEndMatch[1].trim() }
             };
@@ -170,12 +188,12 @@ function precheck(text) {
           if (enMatch) {
             return {
               type: 'bot_command',
-              intent: 'remind',
-              lang: 'en',
+              intent: resolvedIntent,
+              lang: isDaily ? 'pl' : 'en',
               params: { when: enMatch[1], text: enMatch[2].trim() }
             };
           }
-          return { type: 'bot_command', intent: 'remind', lang: 'pl', params: { _raw: content } };
+          return { type: 'bot_command', intent: resolvedIntent, lang: 'pl', params: { _raw: content } };
         }
       }
       if (intent === 'todo_add' || intent === 'note_add' || intent === 'remember') {
@@ -248,7 +266,7 @@ const KNOWN_INTENTS = new Set([
   'briefing_add_feed', 'briefing_on', 'briefing_off',
   'briefing_time_morning', 'briefing_time_evening',
   'briefing_keywords_add', 'briefing_keywords_remove',
-  'briefing_run_now', 'schedule_add', 'remind', 'remember',
+  'briefing_run_now', 'schedule_add', 'remind', 'remind_daily', 'remember',
   'summarize_url', 'daily_digest', 'job_search',
   'todo_add', 'note_add', 'clear_history', 'forget_all', 'system_update',
 ]);

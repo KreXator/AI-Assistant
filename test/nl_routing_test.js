@@ -85,6 +85,13 @@ const testCases = [
   { text: 'aktualizuj bota', expected: { intent: 'system_update' } },
   { text: 'zaktualizuj kod', expected: { intent: 'system_update' } },
 
+  // Daily reminders (codzienne/codziennie → remind_daily)
+  { text: 'Ustaw codzienne przypomnienie: karmienie rybek o 18:00', expected: { intent: 'remind_daily', params: { when: '18:00', text: 'karmienie rybek' } } },
+  { text: 'przypomnij mi codziennie o 7:30 leki', expected: { intent: 'remind_daily', params: { when: '7:30', text: 'leki' } } },
+
+  // One-time remind with adjective (no "codzienne" → still remind)
+  { text: 'dodaj nowe przypomnienie: jutro o 8:00 leki', expected: { intent: 'remind', params: { when: 'jutro o 8:00', text: 'leki' } } },
+
   // Polish ordinal hours in remind (ordinals get normalized to HH:MM before capture)
   { text: 'przypomnij mi jutro o dziewiętnastej zadzwonić do mamy', expected: { intent: 'remind', params: { when: 'jutro o 19:00', text: 'zadzwonić do mamy' } } },
   { text: 'Dodaj przypomnienie: jutro o osiemnastej spotkanie z Kamilem', expected: { intent: 'remind', params: { when: 'jutro o 18:00', text: 'spotkanie z Kamilem' } } },

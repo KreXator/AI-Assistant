@@ -49,7 +49,7 @@ const AUTO_EXECUTE_INTENTS = new Set([
   'list_memory', 'list_schedules', 'list_feeds',
   'briefing_list_feeds', 'schedule_list',
   'summarize_url', 'daily_digest', 'job_search',
-  'todo_add', 'note_add', 'remind', 'remember',
+  'todo_add', 'note_add', 'remind', 'remind_daily', 'remember',
   'briefing_on', 'briefing_off', 'briefing_run_now',
   'system_update'
 ]);
@@ -527,10 +527,15 @@ async function handleScheduleList(bot, msg) {
     );
   const tz = process.env.TZ || 'Europe/Warsaw';
   const list = schedules
-    .map((s, i) => `${i + 1}. 🕐 *${s.time}* daily — _${s.query}_`)
+    .map((s, i) => {
+      if (s.query.startsWith('[REMINDER] ')) {
+        return `${i + 1}. ⏰ *${s.time}* codziennie — _${s.query.slice('[REMINDER] '.length)}_`;
+      }
+      return `${i + 1}. 🕐 *${s.time}* daily — _${s.query}_`;
+    })
     .join('\n');
   await sendLong(bot, msg.chat.id,
-    `📅 *Scheduled searches* (${tz}):\n\n${list}\n\n` +
+    `📅 *Scheduled searches & reminders* (${tz}):\n\n${list}\n\n` +
     `Use \`/schedule test [n]\` to run one now, \`/schedule del [n]\` to remove.`
   );
 }
@@ -1025,6 +1030,37 @@ async function executeIntent(bot, msg, intent) {
       const info = reminder.add(bot, chatId, userId, rText, delayMs);
       await bot.sendMessage(chatId,
         `⏰ ${t(lang, 'Reminder set!', 'Przypomnienie ustawione!')}\n📝 _${rText}_\n🕐 ${t(lang, 'In', 'Za')} *${info.inMs}*`,
+        { parse_mode: 'Markdown' });
+      return true;
+    }
+
+    case 'remind_daily': {
+      const { when, text: reminderText, _raw } = params;
+      if (!when) {
+        const sample = _raw ? ` (np. "${_raw}")` : '';
+        await bot.sendMessage(chatId,
+          t(lang, `⚠️ Could not parse the time. Try: "codzienne przypomnienie o 18:00 karmienie rybek"`,
+            `⚠️ Nie rozpoznałem godziny${sample}. Spróbuj: "ustaw codzienne przypomnienie: karmienie rybek o 18:00"`));
+        return true;
+      }
+      const hmMatch = /(\d{1,2}):(\d{2})/.exec(when);
+      if (!hmMatch) {
+        await bot.sendMessage(chatId,
+          `⚠️ ${t(lang, 'Invalid time format', 'Nieprawidłowy format godziny')}: \`${when}\`. ${t(lang, 'Use HH:MM, e.g. 18:00', 'Użyj HH:MM, np. 18:00')}`,
+          { parse_mode: 'Markdown' });
+        return true;
+      }
+      const time = `${hmMatch[1].padStart(2, '0')}:${hmMatch[2]}`;
+      const rText = reminderText || t(lang, 'Reminder!', 'Przypomnienie!');
+      const schedule = await db.addSchedule(userId, chatId, `[REMINDER] ${rText}`, time);
+      if (!schedule) {
+        await bot.sendMessage(chatId, `❌ ${t(lang, 'Could not save schedule.', 'Nie udało się zapisać.')}`)
+        return true;
+      }
+      scheduler.add(schedule);
+      const tz = process.env.TZ || 'Europe/Warsaw';
+      await bot.sendMessage(chatId,
+        `⏰ ${t(lang, 'Daily reminder set!', 'Codzienne przypomnienie ustawione!')}\n📝 _${rText}_\n🕐 *${time}* ${t(lang, 'every day', 'codziennie')} (${tz})`,
         { parse_mode: 'Markdown' });
       return true;
     }

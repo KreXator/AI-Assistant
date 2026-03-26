@@ -24,6 +24,11 @@ const JOBS_RE    = /pracuj\.pl|oferty\s+pracy|ogłoszenia\s+pracy/i;
  * Route a scheduled query to the best handler based on its content.
  */
 async function executeQuery(query) {
+  // Daily text reminder — return text directly, no search needed
+  if (query.startsWith('[REMINDER] ')) {
+    return query.slice('[REMINDER] '.length);
+  }
+
   const weatherMatch = WEATHER_RE.exec(query);
   if (weatherMatch) {
     let loc = weatherMatch[1].trim();
@@ -82,8 +87,11 @@ function startTask(schedule) {
     console.log(`[scheduler] Running: "${schedule.query}" for chatId=${schedule.chatId}`);
     try {
       const results = await executeQuery(schedule.query);
-      const header  = `🔔 *Scheduled alert* — _${schedule.query}_\n\n`;
-      await sendLong(schedule.chatId, header + results);
+      const isReminder = schedule.query.startsWith('[REMINDER] ');
+      const header = isReminder
+        ? `⏰ *Codzienne przypomnienie:* ${results}`
+        : `🔔 *Scheduled alert* — _${schedule.query}_\n\n${results}`;
+      await sendLong(schedule.chatId, header);
     } catch (err) {
       console.error('[scheduler] Task error:', err.message);
     }
@@ -155,8 +163,11 @@ function remove(scheduleId) {
 async function runNow(schedule) {
   console.log(`[scheduler] Running NOW: "${schedule.query}" for chatId=${schedule.chatId}`);
   const results = await executeQuery(schedule.query);
-  const header  = `🔔 *Test run* — _${schedule.query}_\n\n`;
-  await sendLong(schedule.chatId, header + results);
+  const isReminder = schedule.query.startsWith('[REMINDER] ');
+  const msg = isReminder
+    ? `⏰ *Test — Codzienne przypomnienie:* ${results}`
+    : `🔔 *Test run* — _${schedule.query}_\n\n${results}`;
+  await sendLong(schedule.chatId, msg);
 }
 
 module.exports = { init, add, remove, runNow };
