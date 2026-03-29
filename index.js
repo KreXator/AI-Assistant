@@ -6,6 +6,15 @@
 
 require('dotenv').config();
 
+// Sentry — must be initialized before any other requires
+const Sentry = require('@sentry/node');
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    tracesSampleRate: 0.1,
+  });
+}
+
 const os          = require('os');
 const TelegramBot = require('node-telegram-bot-api');
 
